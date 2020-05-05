@@ -46,14 +46,6 @@
 #define LUKS_KEY_DISABLED 0x0000dead
 #define LUKS_KEY_ENABLED 0x00ac71f3
 
-#if 0
-#define LUKS_MK_DIGEST_ITERATIONS 62894
-#define LUKS_KEY_SLOT_ITERATIONS 1006310
-#else
-#define LUKS_MK_DIGEST_ITERATIONS 10000
-#define LUKS_KEY_SLOT_ITERATIONS 10000
-#endif
-
 #define LUKS_DISK_ALIGNMENT (1024 * 1024)
 
 #define LUKS_IV_SIZE 16
@@ -117,18 +109,6 @@ static void _fix_luks1_hdr_byte_order(luks1_hdr_t* hdr)
         }
     }
 }
-
-#if 0
-static uint32_t _check_sum(const uint8_t* data, size_t size)
-{
-    uint32_t sum = 0;
-
-    while (size--)
-        sum += *data++;
-
-    return sum;
-}
-#endif
 
 static bool _valid_cipher_name(const char* cipher_name)
 {
@@ -666,7 +646,8 @@ static int _initialize_hdr(
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* hash_spec,
-    const char* uuid)
+    const char* uuid,
+    uint64_t mk_iterations)
 {
     int ret = -1;
     size_t stripes;
@@ -704,7 +685,7 @@ static int _initialize_hdr(
     /* Randomly generate the digest salt */
     vic_luks_random(hdr->mk_digest_salt, sizeof(hdr->mk_digest_salt));
 
-    hdr->mk_digest_iter = LUKS_MK_DIGEST_ITERATIONS;
+    hdr->mk_digest_iter = mk_iterations;
 
     /* Derive the digest from the master key and the salt */
     if (vic_luks_pbkdf2(
@@ -770,6 +751,7 @@ static int _add_key(
     luks1_hdr_t* hdr,
     const vic_key_t* master_key,
     const char* pwd,
+    uint64_t slot_iterations,
     void** data_out,
     size_t* size_out,
     size_t* index_out)
@@ -815,7 +797,7 @@ static int _add_key(
 
     ks->active = LUKS_KEY_ENABLED;
 
-    ks->iterations = LUKS_KEY_SLOT_ITERATIONS;
+    ks->iterations = slot_iterations;
 
     vic_luks_random(ks->salt, LUKS_SALT_SIZE);
 
@@ -1013,6 +995,8 @@ vic_result_t luks1_format(
     const char* cipher_mode,
     const char* uuid,
     const char* hash,
+    uint64_t mk_iterations,
+    uint64_t slot_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -1047,6 +1031,12 @@ vic_result_t luks1_format(
         master_key_bytes = sizeof(master_key_buf);
     }
 
+    if (mk_iterations < LUKS_MIN_MK_ITERATIONS)
+        mk_iterations = LUKS_MIN_MK_ITERATIONS;
+
+    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
+        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+
     /* Initialize the hdr struct */
     if (_initialize_hdr(
         &hdr,
@@ -1056,7 +1046,8 @@ vic_result_t luks1_format(
         master_key,
         master_key_bytes,
         hash,
-        uuid) != 0)
+        uuid,
+        mk_iterations) != 0)
     {
         /* ATTN: be more specific */
         RAISE(VIC_FAILED);
@@ -1074,7 +1065,8 @@ vic_result_t luks1_format(
     }
 
     /* Add one key slot */
-    if (_add_key(&hdr, master_key, pwd, &data, &size, NULL) != 0)
+    if (_add_key(
+        &hdr, master_key, pwd, slot_iterations, &data, &size, NULL) != 0)
     {
         RAISE(VIC_OUT_OF_KEYSLOTS);
     }
@@ -1135,6 +1127,7 @@ done:
 
 vic_result_t luks1_add_key(
     vic_device_t* device,
+    uint64_t slot_iterations,
     const char* pwd,
     const char* new_pwd)
 {
@@ -1154,13 +1147,16 @@ vic_result_t luks1_add_key(
     if (luks1_read_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
+    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
+        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+
     if (vic_luks_recover_master_key(device, pwd, &mk, NULL) != 0)
     {
         /* ATTN: be more specific */
         RAISE(VIC_FAILED);
     }
 
-    if (_add_key(hdr, &mk, new_pwd, &data, &size, &index) != 0)
+    if (_add_key(hdr, &mk, new_pwd, slot_iterations, &data, &size, &index) != 0)
     {
         /* ATTN: be more specific */
         RAISE(VIC_FAILED);

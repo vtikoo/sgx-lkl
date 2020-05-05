@@ -141,6 +141,9 @@ vic_result_t vic_luks_format(
     vic_luks_version_t version,
     const char* uuid,
     const char* hash,
+    uint64_t mk_iterations,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -154,6 +157,8 @@ vic_result_t vic_luks_recover_master_key(
 
 vic_result_t vic_luks_add_key(
     vic_device_t* device,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const char* pwd,
     const char* new_pwd);
 

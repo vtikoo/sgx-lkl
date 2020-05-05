@@ -65,7 +65,7 @@ static uint8_t _magic_2nd[LUKS_MAGIC_SIZE] = LUKS_MAGIC_2ND;
 
 #define DEFAULT_KDF_TIME 4
 
-#define DEFAULT_KDF_MEMORY 744976
+#define DEFAULT_PBKDF_MEMORY 744976
 
 #define DEFAULT_SEGMENT_OFFSET 4194304 /* power of two */
 
@@ -80,14 +80,6 @@ static uint8_t _magic_2nd[LUKS_MAGIC_SIZE] = LUKS_MAGIC_2ND;
 /* values for vic_luks_keyslot_t.active */
 #define LUKS_KEY_DISABLED 0x0000dead
 #define LUKS_KEY_ENABLED 0x00ac71f3
-
-#if 0
-#define LUKS_MK_DIGEST_ITERATIONS 62894
-#define LUKS_KEY_SLOT_ITERATIONS 1006310
-#else
-#define LUKS_MK_DIGEST_ITERATIONS 10000
-#define LUKS_KEY_SLOT_ITERATIONS 10000
-#endif
 
 #define LUKS_DISK_ALIGNMENT (1024 * 1024)
 
@@ -2471,6 +2463,8 @@ done:
 static int _init_keyslot(
     luks2_keyslot_t* ks_out,
     const char* hash,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     uint64_t key_size,
     size_t index)
 {
@@ -2495,10 +2489,10 @@ static int _init_keyslot(
             .salt = { 0 },
             /* pbkdf2 */
             .hash = "",
-            .iterations = 0,
+            .iterations = slot_iterations,
             /* argon2 */
             .time = DEFAULT_KDF_TIME,
-            .memory = DEFAULT_KDF_MEMORY,
+            .memory = pbkdf_memory,
             .cpus = 0,
         },
         .af =
@@ -2539,6 +2533,9 @@ static vic_result_t _initialize_hdr(
     const char* label,
     const char* uuid,
     const char* hash,
+    uint64_t mk_iterations,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const char* subsystem,
     vic_integrity_t integrity)
 {
@@ -2601,8 +2598,11 @@ static vic_result_t _initialize_hdr(
         luks2_keyslot_t ks;
         const size_t hdr_sizes = 2 * p->phdr.hdr_size;
 
-        if (_init_keyslot(&ks, hash, key_size, 0) != 0)
+        if (_init_keyslot(
+            &ks, hash, slot_iterations, pbkdf_memory, key_size, 0) != 0)
+        {
             RAISE(VIC_FAILED);
+        }
 
         p->keyslots[0] = ks;
 
@@ -2655,7 +2655,7 @@ static vic_result_t _initialize_hdr(
             .type = "pbkdf2",
             .keyslots = { 1 },
             .segments = { 1 },
-            .iterations = 62534,
+            .iterations = mk_iterations,
         };
 
         if ((digest_size = vic_hash_size(hash)) == (size_t)-1)
@@ -3085,16 +3085,10 @@ static vic_result_t _wipe_device(const char* path)
     for (size_t i = 0; i < nblks; i++)
     {
         ssize_t n;
-#if 1
         size_t offset = i * blksz;
 
         if (lseek(fd, offset, SEEK_SET) != (ssize_t)offset)
             RAISE(VIC_FAILED);
-#endif
-
-#if 0
-        memset(blk, 0xff, blksz);
-#endif
 
         if ((n = write(fd, blk, blksz)) != (ssize_t)blksz)
             RAISE(VIC_WRITE_FAILED);
@@ -3124,6 +3118,9 @@ vic_result_t luks2_format(
     vic_device_t* device,
     const char* uuid,
     const char* hash,
+    uint64_t mk_iterations,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -3169,6 +3166,15 @@ vic_result_t luks2_format(
         master_key_bytes = sizeof(master_key_buf);
     }
 
+    if (mk_iterations < LUKS_MIN_MK_ITERATIONS)
+        mk_iterations = LUKS_MIN_MK_ITERATIONS;
+
+    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
+        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+
+    if (pbkdf_memory == 0)
+        pbkdf_memory = DEFAULT_PBKDF_MEMORY;
+
     /* Get the number of sectors in the device */
     if ((num_device_blocks = device->count(device)) == (size_t)-1)
         RAISE(VIC_UNEXPECTED);
@@ -3185,6 +3191,9 @@ vic_result_t luks2_format(
         label,
         uuid,
         hash,
+        mk_iterations,
+        slot_iterations,
+        pbkdf_memory,
         subsystem,
         integrity));
 
@@ -3440,6 +3449,8 @@ done:
 
 vic_result_t luks2_add_key(
     vic_device_t* device,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const char* pwd,
     const char* new_pwd)
 {
@@ -3454,6 +3465,12 @@ vic_result_t luks2_add_key(
     /* Check parameters */
     if (!_is_valid_device(device) || !pwd || !new_pwd)
         RAISE(VIC_BAD_PARAMETER);
+
+    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
+        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+
+    if (pbkdf_memory == 0)
+        pbkdf_memory = DEFAULT_PBKDF_MEMORY;
 
     /* Read the LUKS2 header */
     if (luks2_read_hdr(device, (luks2_hdr_t**)&ext) != 0)
@@ -3470,8 +3487,16 @@ vic_result_t luks2_add_key(
         if ((index = _find_free_keyslot(ext)) == (size_t)-1)
             RAISE(VIC_OUT_OF_KEYSLOTS);
 
-        if (_init_keyslot(&ext->keyslots[index], hash, key_size, index) != 0)
+        if (_init_keyslot(
+            &ext->keyslots[index],
+            hash,
+            slot_iterations,
+            pbkdf_memory,
+            key_size,
+            index) != 0)
+        {
             RAISE(VIC_FAILED);
+        }
 
         /* Add this keyslot to the digest[0] */
         ext->digests[0].keyslots[index] = 1;

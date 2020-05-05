@@ -88,6 +88,8 @@ vic_result_t luks1_format(
     const char* cipher_mode,
     const char* uuid,
     const char* hash,
+    uint64_t mk_iterations,
+    uint64_t slot_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -105,6 +107,7 @@ vic_result_t luks1_recover_master_key(
 
 vic_result_t luks1_add_key(
     vic_device_t* device,
+    uint64_t slot_iterations,
     const char* pwd,
     const char* new_pwd);
 

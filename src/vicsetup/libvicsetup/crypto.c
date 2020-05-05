@@ -68,9 +68,6 @@ int vic_luks_pbkdf2(
     if (!hash_spec)
         GOTO(done);
 
-    if (iterations < 1000)
-        GOTO(done);
-
     if (key_size > UINT_MAX)
         GOTO(done);
 

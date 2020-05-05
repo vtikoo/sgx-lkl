@@ -85,6 +85,28 @@ int get_opt(
     return -1;
 }
 
+int get_opt_u64(
+    int* argc,
+    const char* argv[],
+    const char* opt,
+    uint64_t* optarg)
+{
+    const char* str;
+    uint64_t x;
+    char* end = NULL;
+
+    if (get_opt(argc, argv, opt, &str) != 0 || !str)
+        return -1;
+
+    x = strtoul(str, &end, 0);
+
+    if (!end || *end)
+        err("%s: bad option argument", opt);
+
+    *optarg = x;
+    return 0;
+}
+
 void dump_args(int argc, const char* argv[])
 {
     for (int i = 0; i < argc; i++)
@@ -103,7 +125,12 @@ static int luksDump(int argc, const char* argv[])
 
     if (argc != 3)
     {
-        fprintf(stderr, "Usage: %s %s <luksfile>\n\n", argv[0], argv[1]);
+        fprintf(stderr,
+            "Usage: %s %s <luksfile>\n"
+            "OPTIONS:\n"
+            "    --dump-payload\n"
+            "\n",
+            argv[0], argv[1]);
         exit(1);
     }
 
@@ -174,6 +201,9 @@ static int luksFormat(int argc, const char* argv[])
     vic_result_t r;
     vic_integrity_t integrity = VIC_INTEGRITY_NONE;
     extern vic_integrity_t vic_integrity_enum(const char* str);
+    uint64_t mk_iterations = 0;
+    uint64_t slot_iterations = 0;
+    uint64_t pbkdf_memory = 0;
 
     /* Get --luks1 option */
     if (get_opt(&argc, argv, "--luks1", NULL) == 0)
@@ -191,8 +221,6 @@ static int luksFormat(int argc, const char* argv[])
 
     if (!hash)
         hash = "sha256";
-
-printf("hash{%s}\n", hash);
 
     /* Get --keyfile option */
     {
@@ -222,6 +250,15 @@ printf("hash{%s}\n", hash);
         }
     }
 
+    /* Get --mk-iterations option */
+    get_opt_u64(&argc, argv, "--mk-iterations", &mk_iterations);
+
+    /* Get --slot-iterations option */
+    get_opt_u64(&argc, argv, "--slot-iterations", &slot_iterations);
+
+    /* Get --pbkdf-memory option */
+    get_opt_u64(&argc, argv, "--pbkdf-memory", &pbkdf_memory);
+
     /* Check usage */
     if (argc != 4)
     {
@@ -231,7 +268,12 @@ printf("hash{%s}\n", hash);
             "    --luks1\n"
             "    --luks2\n"
             "    --uuid <uuid>\n"
+            "    --hash <type>\n"
             "    --keyfile <keyfile>\n"
+            "    --integrity <type>\n"
+            "    --mk-iterations <count>\n"
+            "    --slot-iterations <count>\n"
+            "    --pbkdf-memory <count>\n"
             "\n",
             argv[0],
             argv[1]);
@@ -249,6 +291,9 @@ printf("hash{%s}\n", hash);
         version,
         uuid,
         hash,
+        mk_iterations,
+        slot_iterations,
+        pbkdf_memory,
         key,
         key_size,
         pwd,
@@ -306,12 +351,23 @@ static int luksAddKey(int argc, const char* argv[])
 {
     vic_device_t* dev;
     vic_result_t r;
+    uint64_t slot_iterations = 0;
+    uint64_t pbkdf_memory = 0;
+
+    /* Get --slot-iterations option */
+    get_opt_u64(&argc, argv, "--slot-iterations", &slot_iterations);
+
+    /* Get --pbkdf-memory option */
+    get_opt_u64(&argc, argv, "--pbkdf-memory", &pbkdf_memory);
 
     /* Check usage */
     if (argc != 5)
     {
         fprintf(stderr,
             "Usage: %s %s <luksfile> <pwd> <new-pwd>\n"
+            "OPTIONS:\n"
+            "    --slot-iterations <count>\n"
+            "    --pbkdf_memory <count>\n"
             "\n",
             argv[0],
             argv[1]);
@@ -325,7 +381,8 @@ static int luksAddKey(int argc, const char* argv[])
     if (!(dev = vic_open_device(luksfile)))
         err("cannot open %s\n", luksfile);
 
-    if ((r = vic_luks_add_key(dev, pwd, new_pwd)) != VIC_OK)
+    if ((r = vic_luks_add_key(
+        dev, slot_iterations, pbkdf_memory, pwd, new_pwd)) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
@@ -564,6 +621,12 @@ static int verityFormat(int argc, const char* argv[])
     {
         fprintf(stderr,
             "Usage: %s %s <datafile> <hashfile>\n"
+            "OPTIONS:\n"
+            "    --salt <value>\n"
+            "    --uuid <value>\n"
+            "    --hash <type>\n"
+            "    --no-superblock\n"
+            "\n"
             "\n",
             argv[0],
             argv[1]);

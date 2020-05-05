@@ -1,6 +1,6 @@
 include defs.mak
 
-all:
+all: depend
 	$(MAKE) -C libvicsetup
 	$(MAKE) -C vicsetup
 

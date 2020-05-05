@@ -179,6 +179,9 @@ vic_result_t vic_luks_format(
     vic_luks_version_t version,
     const char* uuid,
     const char* hash,
+    uint64_t mk_iterations,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -193,6 +196,8 @@ vic_result_t vic_luks_format(
             LUKS_CIPHER_MODE_XTS_PLAIN64,
             uuid,
             hash,
+            mk_iterations,
+            slot_iterations,
             master_key,
             master_key_bytes,
             pwd,
@@ -204,6 +209,9 @@ vic_result_t vic_luks_format(
             device,
             uuid,
             hash,
+            mk_iterations,
+            slot_iterations,
+            pbkdf_memory,
             master_key,
             master_key_bytes,
             pwd,
@@ -217,6 +225,8 @@ vic_result_t vic_luks_format(
 
 vic_result_t vic_luks_add_key(
     vic_device_t* device,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
     const char* pwd,
     const char* new_pwd)
 {
@@ -231,11 +241,12 @@ vic_result_t vic_luks_add_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_add_key(device, pwd, new_pwd);
+        return luks1_add_key(device, slot_iterations, pwd, new_pwd);
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_add_key(device, pwd, new_pwd);
+        return luks2_add_key(device, slot_iterations, pbkdf_memory, pwd,
+            new_pwd);
     }
     else
     {

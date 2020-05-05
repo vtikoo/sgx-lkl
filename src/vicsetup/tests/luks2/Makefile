@@ -13,19 +13,29 @@ tests: dirs luksFormat luksChangeKey luksAddKey luksRemoveKey luksGetMasterKey l
 keyfile:
 	@ head -c 64 /dev/random > keyfile
 
+LUKSFORMAT_OPTS = --luks2
+LUKSFORMAT_OPTS += --uuid $(UUID)
+LUKSFORMAT_OPTS += --keyfile keyfile
+LUKSFORMAT_OPTS += --mk-iterations 1000
+LUKSFORMAT_OPTS += --slot-iterations 1000
+LUKSFORMAT_OPTS += --pbkdf-memory 4096
+
 luksFormat: keyfile
 	head -c $(SIZE) /dev/zero > luksfile
-	vicsetup luksFormat --luks2 --uuid $(UUID) --keyfile keyfile luksfile pass1
+	vicsetup luksFormat $(LUKSFORMAT_OPTS) luksfile pass1
 
 luksChangeKey:
 	vicsetup luksChangeKey luksfile pass1 passx
 	vicsetup luksChangeKey luksfile passx pass1
 
+LUKSADDKEY_OPTS += --slot-iterations 1000
+LUKSADDKEY_OPTS += --pbkdf-memory 1024
+
 luksAddKey:
-	vicsetup luksAddKey luksfile pass1 pass2
-	vicsetup luksAddKey luksfile pass2 pass3
-	vicsetup luksAddKey luksfile pass3 pass4
-	vicsetup luksAddKey luksfile pass4 pass5
+	vicsetup luksAddKey $(LUKSADDKEY_OPTS) luksfile pass1 pass2
+	vicsetup luksAddKey $(LUKSADDKEY_OPTS) luksfile pass2 pass3
+	vicsetup luksAddKey $(LUKSADDKEY_OPTS) luksfile pass3 pass4
+	vicsetup luksAddKey $(LUKSADDKEY_OPTS) luksfile pass4 pass5
 
 luksRemoveKey:
 	vicsetup luksRemoveKey luksfile pass2
