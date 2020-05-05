@@ -1,0 +1,711 @@
+#include <vic.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include "../libvicsetup/hexdump.h"
+#include "../libvicsetup/verity.h"
+
+#define USAGE \
+    "\n" \
+    "Usage: %s <action> ...\n" \
+    "\n" \
+    "actions:\n" \
+    "    luksDump\n" \
+    "    luksFormat\n" \
+    "    luksGetMasterKey\n" \
+    "    luksAddKey\n" \
+    "    luksChangeKey\n" \
+    "    luksRemoveKey\n" \
+    "    luksOpen\n" \
+    "    luksClose\n" \
+    "    verityDump\n" \
+    "    verityFormat\n" \
+    "    verityOpen\n" \
+    "\n"
+
+static const char* arg0;
+
+void vic_hexdump(const void* data, size_t size);
+
+void vic_hexdump_indent(const void* data, size_t size, size_t indent);
+
+__attribute__((format(printf, 1, 2)))
+static void err(const char* fmt, ...)
+{
+    va_list ap;
+
+    fprintf(stderr, "%s: error: ", arg0);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "\n");
+
+    exit(1);
+}
+
+int get_opt(
+    int* argc,
+    const char* argv[],
+    const char* opt,
+    const char** optarg)
+{
+    if (optarg)
+        *optarg = NULL;
+
+    for (int i = 0; i < *argc; )
+    {
+        if (opt && strcmp(argv[i], opt) == 0)
+        {
+            if (optarg)
+            {
+                if (i + 1 == *argc)
+                    err("%s: missing option argument", opt);
+
+                *optarg = argv[i+1];
+                memmove(&argv[i], &argv[i+2], (*argc - i - 1) * sizeof(char*));
+                (*argc) -= 2;
+                return 0;
+            }
+            else
+            {
+                memmove(&argv[i], &argv[i+1], (*argc - i) * sizeof(char*));
+                (*argc)--;
+                return 0;
+            }
+        }
+        else
+        {
+            i++;
+        }
+    }
+
+    /* Not found! */
+    return -1;
+}
+
+void dump_args(int argc, const char* argv[])
+{
+    for (int i = 0; i < argc; i++)
+        printf("argv[%d]=%s\n", i, argv[i]);
+}
+
+static int luksDump(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_result_t r;
+    bool dump_payload = false;
+
+    /* Get --dump-payload option */
+    if (get_opt(&argc, argv, "--dump-payload", NULL) == 0)
+        dump_payload = true;
+
+    if (argc != 3)
+    {
+        fprintf(stderr, "Usage: %s %s <luksfile>\n\n", argv[0], argv[1]);
+        exit(1);
+    }
+
+    if (!(dev = vic_open_device(argv[2])))
+        err("cannot open %s\n", argv[2]);
+
+    if ((r = vic_luks_dump(dev)) != VIC_OK)
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+
+    /* dump the payload */
+    if (dump_payload)
+    {
+        vic_luks_stat_t buf;
+        size_t blkno;
+        size_t nblocks;
+        FILE* os;
+
+        if (vic_luks_stat(dev, &buf) != VIC_OK)
+            err("vic_luks_stat() failed: %s\n", argv[2]);
+
+        printf("payload\n");
+        printf("{\n");
+        printf("  payload_offset: %zu\n", buf.payload_offset);
+        printf("  payload_size: %zu\n", buf.payload_size);
+        printf("  payload_data:\n");
+
+        blkno = buf.payload_offset / VIC_SECTOR_SIZE;
+        nblocks = buf.payload_size / VIC_SECTOR_SIZE;
+
+        if (!(os = fopen("/tmp/integrt", "wb")))
+            err("failed to open /tmp/integrt");
+
+        for (size_t i = blkno; i < blkno + nblocks; i++)
+        {
+            vic_block_t blk;
+            const size_t indent = 2;
+
+            if (dev->get(dev, i, &blk, 1) != 0)
+                err("failed to read block %zu\n", i);
+
+            printf("    [BLOCK %zu]\n", i);
+            vic_hexdump_special(&blk, sizeof(blk), true, true, indent);
+
+            if (fwrite(&blk, 1, sizeof(blk), os) != sizeof(blk))
+                err("failed to write /tmp/integrt");
+        }
+
+        fclose(os);
+
+        printf("}\n");
+    }
+
+    vic_close_device(dev);
+
+    return 0;
+}
+
+static int luksFormat(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_luks_version_t version = LUKS_VERSION_1;
+    const char* uuid = NULL;
+    const char* hash = NULL;
+    const char* keyfile = NULL;
+    const vic_key_t* key = NULL;
+    vic_key_t key_buf;
+    size_t key_size = 0;
+    vic_result_t r;
+    vic_integrity_t integrity = VIC_INTEGRITY_NONE;
+    extern vic_integrity_t vic_integrity_enum(const char* str);
+
+    /* Get --luks1 option */
+    if (get_opt(&argc, argv, "--luks1", NULL) == 0)
+        version = LUKS_VERSION_1;
+
+    /* Get --luks2 option */
+    if (get_opt(&argc, argv, "--luks2", NULL) == 0)
+        version = LUKS_VERSION_2;
+
+    /* Get --uuid option */
+    get_opt(&argc, argv, "--uuid", &uuid);
+
+    /* Get --hash option */
+    get_opt(&argc, argv, "--hash", &hash);
+
+    if (!hash)
+        hash = "sha256";
+
+printf("hash{%s}\n", hash);
+
+    /* Get --keyfile option */
+    {
+        get_opt(&argc, argv, "--keyfile", &keyfile);
+
+        if (keyfile)
+        {
+            if (vic_luks_load_key(keyfile, &key_buf, &key_size) != VIC_OK)
+                err("failed to load keyfile: %s", keyfile);
+
+            key = &key_buf;
+        }
+    }
+
+    /* Get --integrity option */
+    {
+        const char* opt;
+
+        get_opt(&argc, argv, "--integrity", &opt);
+
+        if (opt)
+        {
+            integrity = vic_integrity_enum(opt);
+
+            if (integrity == VIC_INTEGRITY_NONE)
+                err("unknown --integrity option: %s", opt);
+        }
+    }
+
+    /* Check usage */
+    if (argc != 4)
+    {
+        fprintf(stderr,
+            "Usage: %s %s [OPTIONS] <luksfile> <pwd>\n"
+            "OPTIONS:\n"
+            "    --luks1\n"
+            "    --luks2\n"
+            "    --uuid <uuid>\n"
+            "    --keyfile <keyfile>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* luksfile = argv[2];
+    const char* pwd = argv[3];
+
+    if (!(dev = vic_open_device(luksfile)))
+        err("cannot open %s\n", luksfile);
+
+    if ((r = vic_luks_format(
+        dev,
+        version,
+        uuid,
+        hash,
+        key,
+        key_size,
+        pwd,
+        integrity)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    vic_close_device(dev);
+
+    return 0;
+}
+
+static int luksGetMasterKey(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_result_t r;
+    vic_key_t key;
+    size_t key_size;
+
+    /* Check usage */
+    if (argc != 4)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <luksfile> <pwd>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* luksfile = argv[2];
+    const char* pwd = argv[3];
+
+    if (!(dev = vic_open_device(luksfile)))
+        err("cannot open %s\n", luksfile);
+
+    if ((r = vic_luks_recover_master_key(
+        dev,
+        pwd,
+        &key,
+        &key_size)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    vic_hexdump(&key.buf, key_size);
+
+    vic_close_device(dev);
+
+    return 0;
+}
+
+static int luksAddKey(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 5)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <luksfile> <pwd> <new-pwd>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* luksfile = argv[2];
+    const char* pwd = argv[3];
+    const char* new_pwd = argv[4];
+
+    if (!(dev = vic_open_device(luksfile)))
+        err("cannot open %s\n", luksfile);
+
+    if ((r = vic_luks_add_key(dev, pwd, new_pwd)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    vic_close_device(dev);
+
+    return 0;
+}
+
+static int luksChangeKey(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 5)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <luksfile> <old-pwd> <new-pwd>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* luksfile = argv[2];
+    const char* old_pwd = argv[3];
+    const char* new_pwd = argv[4];
+
+    if (!(dev = vic_open_device(luksfile)))
+        err("cannot open %s\n", luksfile);
+
+    if ((r = vic_luks_change_key(
+        dev,
+        old_pwd,
+        new_pwd)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    vic_close_device(dev);
+
+    return 0;
+}
+
+static int luksRemoveKey(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 4)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <luksfile> <pwd>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* luksfile = argv[2];
+    const char* pwd = argv[3];
+
+    if (!(dev = vic_open_device(luksfile)))
+        err("cannot open %s\n", luksfile);
+
+    if ((r = vic_luks_remove_key(dev, pwd)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    vic_close_device(dev);
+
+    return 0;
+}
+
+static int luksOpen(int argc, const char* argv[])
+{
+    vic_device_t* dev;
+    vic_result_t r;
+    vic_key_t key;
+    size_t key_size;
+
+    /* Check usage */
+    if (argc != 5)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <luksfile> <pwd> <dev-mapper-name>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* luksfile = argv[2];
+    const char* pwd = argv[3];
+    const char* name = argv[4];
+
+    if (!(dev = vic_open_device(luksfile)))
+        err("cannot open %s\n", luksfile);
+
+    if ((r = vic_luks_recover_master_key(
+        dev,
+        pwd,
+        &key,
+        &key_size)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    vic_close_device(dev);
+
+    if ((r = vic_luks_open(luksfile, name, &key, key_size)) != VIC_OK)
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+
+    return 0;
+}
+
+static int luksClose(int argc, const char* argv[])
+{
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 3)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <dev-mapper-name>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* name = argv[2];
+
+    if ((r = vic_luks_close(name)) != VIC_OK)
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+
+    return 0;
+}
+
+static int verityClose(int argc, const char* argv[])
+{
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 3)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <dev-mapper-name>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* name = argv[2];
+
+    if ((r = vic_luks_close(name)) != VIC_OK)
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+
+    return 0;
+}
+
+static int _hexstr_to_salt(const char* hexstr, uint8_t buf[32])
+{
+    if (strlen(hexstr) != 64)
+        return -1;
+
+    for (size_t i = 0; i < 32; i++)
+    {
+        uint32_t x;
+
+        if (sscanf(hexstr, "%02x", &x) != 1)
+            return -1;
+
+        buf[i] = x;
+        hexstr += 2;
+    }
+
+    return 0;
+}
+
+static int verityDump(int argc, const char* argv[])
+{
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 3)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <hashfile>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* hashfile = argv[2];
+
+    if ((r = vic_verity_dump(hashfile)) != VIC_OK)
+        err("verityDump: failed: r=%u: %s\n", r, vic_result_string(r));
+
+    return 0;
+}
+
+static int verityFormat(int argc, const char* argv[])
+{
+    const char* salt_opt = NULL;
+    const char* uuid_opt = NULL;
+    const char* hash_opt = NULL;
+    bool need_superblock = true;
+    uint8_t salt_buf[VIC_VERITY_MAX_SALT_SIZE];
+    const uint8_t* salt = NULL;
+    size_t salt_size = 0;
+    vic_result_t r;
+    uint8_t root_hash[256];
+    size_t root_hash_size = sizeof(root_hash);
+
+    /* Get --salt option */
+    get_opt(&argc, argv, "--salt", &salt_opt);
+
+    /* Get --uuid option */
+    get_opt(&argc, argv, "--uuid", &uuid_opt);
+
+    /* Get --hash option */
+    get_opt(&argc, argv, "--hash", &hash_opt);
+
+    /* Get --no-superblock option */
+    if (get_opt(&argc, argv, "--no-superblock", NULL) == 0)
+        need_superblock = false;
+
+    /* Check usage */
+    if (argc != 4)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <datafile> <hashfile>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* datafile = argv[2];
+    const char* hashfile = argv[3];
+
+    if (salt_opt)
+    {
+        salt_size = strlen(salt_opt) / 2;
+        salt = salt_buf;
+
+        if (salt_size > VIC_VERITY_MAX_SALT_SIZE)
+            err("salt option is too long");
+
+        if (_hexstr_to_salt(salt_opt, salt_buf) != 0)
+            err("bad --salt option");
+    }
+
+    if ((r = vic_verity_format(
+        datafile,
+        hashfile,
+        hash_opt,
+        uuid_opt,
+        salt,
+        salt_size,
+        need_superblock,
+        root_hash,
+        &root_hash_size)) != 0)
+    {
+        err("verityFormat: failed: r=%u: %s\n", r, vic_result_string(r));
+    }
+
+    printf("\nRoot hash: ");
+    vic_hexdump_flat(root_hash, root_hash_size);
+    printf("\n\n");
+
+    return 0;
+}
+
+static int verityOpen(int argc, const char* argv[])
+{
+    vic_result_t r;
+
+    /* Check usage */
+    if (argc != 6)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <data_device> <name> <hash_device> <root_hash>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* data_device_opt = argv[2];
+    const char* name_opt = argv[3];
+    const char* hash_device_opt = argv[4];
+    const char* root_hash_opt = argv[5];
+    uint8_t* root_hash;
+    size_t root_hash_size;
+
+    if (vic_ascii_to_bin(root_hash_opt, &root_hash, &root_hash_size) != VIC_OK)
+        err("bad root-hash argument");
+
+    if ((r = vic_verity_open(
+        name_opt,
+        data_device_opt,
+        hash_device_opt,
+        root_hash,
+        root_hash_size)) != VIC_OK)
+    {
+        err("vic_verity_open() failed: %u: %s\n", r, vic_result_string(r));
+    }
+
+    return 0;
+}
+
+int main(int argc, const char* argv[])
+{
+    arg0 = argv[0];
+
+    if (argc < 2)
+    {
+        fprintf(stderr, USAGE, arg0);
+        exit(1);
+    }
+
+    if (strcmp(argv[1], "luksDump") == 0)
+    {
+        return luksDump(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksFormat") == 0)
+    {
+        return luksFormat(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksGetMasterKey") == 0)
+    {
+        return luksGetMasterKey(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksAddKey") == 0)
+    {
+        return luksAddKey(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksChangeKey") == 0)
+    {
+        return luksChangeKey(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksRemoveKey") == 0)
+    {
+        return luksRemoveKey(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksOpen") == 0)
+    {
+        return luksOpen(argc, argv);
+    }
+    else if (strcmp(argv[1], "luksClose") == 0)
+    {
+        return luksClose(argc, argv);
+    }
+    else if (strcmp(argv[1], "verityDump") == 0)
+    {
+        return verityDump(argc, argv);
+    }
+    else if (strcmp(argv[1], "verityFormat") == 0)
+    {
+        return verityFormat(argc, argv);
+    }
+    else if (strcmp(argv[1], "verityOpen") == 0)
+    {
+        return verityOpen(argc, argv);
+    }
+    else if (strcmp(argv[1], "verityClose") == 0)
+    {
+        return verityClose(argc, argv);
+    }
+    else
+    {
+        err("Unknown action: %s", argv[1]);
+    }
+
+    return 0;
+}
