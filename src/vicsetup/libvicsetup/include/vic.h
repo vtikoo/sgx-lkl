@@ -60,6 +60,7 @@ typedef enum _vic_result
     VIC_SEEK_FAILED,
     VIC_IOCTL_FAILED,
     VIC_BAD_SIGNATURE,
+    VIC_BAD_CIPHER,
 }
 vic_result_t;
 
@@ -139,6 +140,8 @@ vic_result_t vic_luks_load_key(
 vic_result_t vic_luks_format(
     vic_device_t* device,
     vic_luks_version_t version,
+    const char* cipher,
+    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
@@ -157,6 +160,7 @@ vic_result_t vic_luks_recover_master_key(
 
 vic_result_t vic_luks_add_key(
     vic_device_t* device,
+    const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
     const char* pwd,

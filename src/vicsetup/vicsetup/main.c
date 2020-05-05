@@ -192,6 +192,8 @@ static int luksFormat(int argc, const char* argv[])
 {
     vic_device_t* dev;
     vic_luks_version_t version = LUKS_VERSION_1;
+    const char* cipher = NULL;
+    const char* keyslot_cipher = NULL;
     const char* uuid = NULL;
     const char* hash = NULL;
     const char* keyfile = NULL;
@@ -212,6 +214,12 @@ static int luksFormat(int argc, const char* argv[])
     /* Get --luks2 option */
     if (get_opt(&argc, argv, "--luks2", NULL) == 0)
         version = LUKS_VERSION_2;
+
+    /* Get --cipher option */
+    get_opt(&argc, argv, "--cipher", &cipher);
+
+    /* Get --keyslot-cipher option */
+    get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
 
     /* Get --uuid option */
     get_opt(&argc, argv, "--uuid", &uuid);
@@ -267,6 +275,8 @@ static int luksFormat(int argc, const char* argv[])
             "OPTIONS:\n"
             "    --luks1\n"
             "    --luks2\n"
+            "    --cipher <cipher>\n"
+            "    --keyslot-cipher <cipher>\n"
             "    --uuid <uuid>\n"
             "    --hash <type>\n"
             "    --keyfile <keyfile>\n"
@@ -289,6 +299,8 @@ static int luksFormat(int argc, const char* argv[])
     if ((r = vic_luks_format(
         dev,
         version,
+        cipher,
+        keyslot_cipher,
         uuid,
         hash,
         mk_iterations,
@@ -351,8 +363,12 @@ static int luksAddKey(int argc, const char* argv[])
 {
     vic_device_t* dev;
     vic_result_t r;
+    const char* keyslot_cipher = NULL;
     uint64_t slot_iterations = 0;
     uint64_t pbkdf_memory = 0;
+
+    /* Get --keyslot-cipher option */
+    get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
 
     /* Get --slot-iterations option */
     get_opt_u64(&argc, argv, "--slot-iterations", &slot_iterations);
@@ -381,8 +397,8 @@ static int luksAddKey(int argc, const char* argv[])
     if (!(dev = vic_open_device(luksfile)))
         err("cannot open %s\n", luksfile);
 
-    if ((r = vic_luks_add_key(
-        dev, slot_iterations, pbkdf_memory, pwd, new_pwd)) != VIC_OK)
+    if ((r = vic_luks_add_key(dev, keyslot_cipher, slot_iterations,
+        pbkdf_memory, pwd, new_pwd)) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }

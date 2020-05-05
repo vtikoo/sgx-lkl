@@ -16,6 +16,8 @@
 #define LUKS_MIN_MK_ITERATIONS 1000
 #define LUKS_MIN_SLOT_ITERATIONS 1000
 
+#define LUKS_DEFAULT_CIPHER "aes-xts-plain64"
+
 /* Common fields for both LUKS1 and LUKS2 headers */
 typedef struct vic_luks_hdr
 {

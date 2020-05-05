@@ -106,6 +106,8 @@ const char* vic_result_string(vic_result_t result)
             return "VIC_IOCTL_FAILED";
         case VIC_BAD_SIGNATURE:
             return "VIC_BAD_SIGNATURE";
+        case VIC_BAD_CIPHER:
+            return "VIC_BAD_CIPHER";
     };
 
     /* Unreachable */

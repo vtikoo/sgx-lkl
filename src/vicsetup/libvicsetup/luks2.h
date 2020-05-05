@@ -179,6 +179,8 @@ vic_result_t luks2_recover_master_key(
 
 vic_result_t luks2_format(
     vic_device_t* device,
+    const char* cipher,
+    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
@@ -191,6 +193,7 @@ vic_result_t luks2_format(
 
 vic_result_t luks2_add_key(
     vic_device_t* device,
+    const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
     const char* pwd,

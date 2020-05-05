@@ -16,6 +16,7 @@
 #include "hexdump.h"
 #include "integrity.h"
 #include "dm.h"
+#include "strings.h"
 
 VIC_STATIC_ASSERT(VIC_OFFSETOF(vic_luks_hdr_t, magic) == 0);
 VIC_STATIC_ASSERT(VIC_OFFSETOF(vic_luks_hdr_t, version) == 6);
@@ -174,9 +175,46 @@ done:
     return result;
 }
 
+static vic_result_t _split_cipher(
+    const char* cipher,
+    char cipher_name[LUKS_CIPHER_NAME_SIZE],
+    char cipher_mode[LUKS_CIPHER_MODE_SIZE])
+{
+    vic_result_t result = VIC_UNEXPECTED;
+    size_t offset;
+
+    if (!cipher | !cipher_name || !cipher_mode)
+        RAISE(VIC_BAD_PARAMETER);
+
+    /* Find the index of the first '-' character */
+    {
+        const char* p;
+
+        if (!(p = strchr(cipher, '-')))
+            RAISE(VIC_BAD_CIPHER);
+
+        offset = p - cipher;
+
+        if (offset >= LUKS_CIPHER_NAME_SIZE)
+            RAISE(VIC_BAD_CIPHER);
+    }
+
+    vic_strlcpy(cipher_name, cipher, LUKS_CIPHER_NAME_SIZE);
+    cipher_name[offset] = '\0';
+
+    vic_strlcpy(cipher_mode, &cipher[offset+1], LUKS_CIPHER_MODE_SIZE);
+
+    result = VIC_OK;
+
+done:
+    return result;
+}
+
 vic_result_t vic_luks_format(
     vic_device_t* device,
     vic_luks_version_t version,
+    const char* cipher,
+    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
@@ -187,10 +225,20 @@ vic_result_t vic_luks_format(
     const char* pwd,
     uint32_t flags)
 {
+    vic_result_t result = VIC_UNEXPECTED;
+
+    if (!cipher)
+        cipher = LUKS_DEFAULT_CIPHER;
+
     if (version == LUKS_VERSION_1)
     {
+        char cipher_name[LUKS_CIPHER_NAME_SIZE];
+        char cipher_mode[LUKS_CIPHER_MODE_SIZE];
+
+        CHECK(_split_cipher(cipher, cipher_name, cipher_mode));
+
         /* ATTN: support other ciphers */
-        return luks1_format(
+        CHECK(luks1_format(
             device,
             LUKS_CIPHER_NAME_AES,
             LUKS_CIPHER_MODE_XTS_PLAIN64,
@@ -201,12 +249,14 @@ vic_result_t vic_luks_format(
             master_key,
             master_key_bytes,
             pwd,
-            flags);
+            flags));
     }
     else if (version == LUKS_VERSION_2)
     {
-        return luks2_format(
+        CHECK(luks2_format(
             device,
+            cipher,
+            keyslot_cipher,
             uuid,
             hash,
             mk_iterations,
@@ -215,16 +265,22 @@ vic_result_t vic_luks_format(
             master_key,
             master_key_bytes,
             pwd,
-            flags);
+            flags));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
+
+    result = VIC_OK;
+
+done:
+    return result;
 }
 
 vic_result_t vic_luks_add_key(
     vic_device_t* device,
+    const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
     const char* pwd,
@@ -245,8 +301,8 @@ vic_result_t vic_luks_add_key(
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_add_key(device, slot_iterations, pbkdf_memory, pwd,
-            new_pwd);
+        return luks2_add_key(device, keyslot_cipher, slot_iterations,
+            pbkdf_memory, pwd, new_pwd);
     }
     else
     {

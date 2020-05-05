@@ -16,3 +16,4 @@ DIRS += $(LIBJSON_DIR)
 DIRS += $(TOP)/libvicsetup
 
 include ../rules.mak
+-include depend.mak

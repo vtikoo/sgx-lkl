@@ -2040,6 +2040,7 @@ static const mbedtls_cipher_info_t* _get_cipher_info(
     }
     else
     {
+        /* ATTN: support other cipher types */
         GOTO(done);
     }
 
@@ -2462,6 +2463,7 @@ done:
 
 static int _init_keyslot(
     luks2_keyslot_t* ks_out,
+    const char* keyslot_cipher,
     const char* hash,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
@@ -2504,7 +2506,6 @@ static int _init_keyslot(
         .area =
         {
             .type = "raw",
-            .encryption = "aes-xts-plain64",
             .key_size = key_size,
             .offset = area_offset,
             .size = area_size,
@@ -2512,6 +2513,7 @@ static int _init_keyslot(
     };
 
     vic_strlcpy(ks.af.hash, hash, sizeof(ks.af.hash));
+    vic_strlcpy(ks.area.encryption, keyslot_cipher, sizeof(ks.area.encryption));
 
     vic_luks_random(ks.kdf.salt, sizeof(ks.kdf.salt));
 
@@ -2530,6 +2532,8 @@ static vic_result_t _initialize_hdr(
     luks2_ext_hdr_t** ext_out,
     const vic_key_t* key,
     size_t key_size,
+    const char* cipher,
+    const char* keyslot_cipher,
     const char* label,
     const char* uuid,
     const char* hash,
@@ -2599,7 +2603,8 @@ static vic_result_t _initialize_hdr(
         const size_t hdr_sizes = 2 * p->phdr.hdr_size;
 
         if (_init_keyslot(
-            &ks, hash, slot_iterations, pbkdf_memory, key_size, 0) != 0)
+            &ks, keyslot_cipher, hash, slot_iterations, pbkdf_memory,
+            key_size, 0) != 0)
         {
             RAISE(VIC_FAILED);
         }
@@ -2621,9 +2626,10 @@ static vic_result_t _initialize_hdr(
             .type = "crypt",
             .iv_tweak = 0,
             .size = (uint64_t)-1, /* dynamic */
-            .encryption = "aes-xts-plain64",
             .sector_size = VIC_SECTOR_SIZE,
         };
+
+        vic_strlcpy(s.encryption, cipher, sizeof(s.encryption));
 
         s.offset = (2 * hdr_size) + keyslots_size;
 
@@ -3116,6 +3122,8 @@ done:
 
 vic_result_t luks2_format(
     vic_device_t* device,
+    const char* cipher,
+    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
@@ -3166,6 +3174,12 @@ vic_result_t luks2_format(
         master_key_bytes = sizeof(master_key_buf);
     }
 
+    if (!cipher)
+        cipher = LUKS_DEFAULT_CIPHER;
+
+    if (!keyslot_cipher)
+        keyslot_cipher = LUKS_DEFAULT_CIPHER;
+
     if (mk_iterations < LUKS_MIN_MK_ITERATIONS)
         mk_iterations = LUKS_MIN_MK_ITERATIONS;
 
@@ -3188,6 +3202,8 @@ vic_result_t luks2_format(
         &ext,
         master_key,
         master_key_bytes,
+        cipher,
+        keyslot_cipher,
         label,
         uuid,
         hash,
@@ -3449,6 +3465,7 @@ done:
 
 vic_result_t luks2_add_key(
     vic_device_t* device,
+    const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
     const char* pwd,
@@ -3477,7 +3494,10 @@ vic_result_t luks2_add_key(
         RAISE(VIC_HEADER_READ_FAILED);
 
     /* Use password to find the master key */
-    CHECK(_find_key_by_pwd(device, ext, pwd, &key, &key_size, NULL));
+    CHECK(_find_key_by_pwd(device, ext, pwd, &key, &key_size, &index));
+
+    if (!keyslot_cipher)
+        keyslot_cipher = ext->keyslots[index].area.encryption;
 
     /* Set the hash from the digest */
     hash = ext->digests[0].hash;
@@ -3489,6 +3509,7 @@ vic_result_t luks2_add_key(
 
         if (_init_keyslot(
             &ext->keyslots[index],
+            keyslot_cipher,
             hash,
             slot_iterations,
             pbkdf_memory,
