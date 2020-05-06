@@ -8,14 +8,27 @@ UUID=11e8a94c-938d-4869-b623-cc3cd5ce8fed
 
 all:
 
-tests: dirs luksFormat luksChangeKey luksAddKey luksRemoveKey luksGetMasterKey luksOpen luksClose
+# AES ciphers:
+tests:
+	$(MAKE) all_tests CIPHER=aes-ecb KEYSIZE=16
+	$(MAKE) all_tests CIPHER=aes-ecb KEYSIZE=32
+	$(MAKE) all_tests CIPHER=aes-cbc-plain KEYSIZE=16
+	$(MAKE) all_tests CIPHER=aes-cbc-plain KEYSIZE=32
+	$(MAKE) all_tests CIPHER=aes-xts-plain64 KEYSIZE=32
+	$(MAKE) all_tests CIPHER=aes-xts-plain64 KEYSIZE=64
 
-keyfile:
-	@ head -c 64 /dev/random > keyfile
+all_tests: dirs luksFormat luksChangeKey luksAddKey luksRemoveKey luksGetMasterKey luksOpen luksClose
 
-luksFormat: keyfile
+LUKSFORMAT_OPTS += --uuid $(UUID)
+LUKSFORMAT_OPTS += --keyfile keyfile
+LUKSFORMAT_OPTS += --cipher $(CIPHER)
+
+VG=valgrind --tool=memcheck
+
+luksFormat:
+	head -c $(KEYSIZE) /dev/urandom > keyfile
 	head -c $(SIZE) /dev/zero > luksfile
-	vicsetup luksFormat --uuid $(UUID) --keyfile keyfile luksfile pass1
+	vicsetup luksFormat $(LUKSFORMAT_OPTS) luksfile pass1
 
 luksChangeKey:
 	vicsetup luksChangeKey luksfile pass1 passx

@@ -287,9 +287,6 @@ static const mbedtls_cipher_info_t* _get_cipher_info(const luks1_hdr_t* hdr)
             case 128:
                 cipher_type = MBEDTLS_CIPHER_AES_128_ECB;
                 break;
-            case 192:
-                cipher_type = MBEDTLS_CIPHER_AES_192_ECB;
-                break;
             case 256:
                 cipher_type = MBEDTLS_CIPHER_AES_256_ECB;
                 break;
@@ -303,9 +300,6 @@ static const mbedtls_cipher_info_t* _get_cipher_info(const luks1_hdr_t* hdr)
         {
             case 128:
                 cipher_type = MBEDTLS_CIPHER_AES_128_CBC;
-                break;
-            case 192:
-                cipher_type = MBEDTLS_CIPHER_AES_192_CBC;
                 break;
             case 256:
                 cipher_type = MBEDTLS_CIPHER_AES_256_CBC;
@@ -331,6 +325,9 @@ static const mbedtls_cipher_info_t* _get_cipher_info(const luks1_hdr_t* hdr)
     }
     else
     {
+#if 1
+        printf("UNSUPPORTED: {%s}{%s}\n", hdr->cipher_name, hdr->cipher_mode);
+#endif
         /* ATTN: unsupported */
         return NULL;
     }
@@ -419,67 +416,83 @@ static int _crypt(
     mbedtls_operation_t op, /* MBEDTLS_ENCRYPT or MBEDTLS_DECRYPT */
     const vic_key_t* key,
     const uint8_t* data_in,
-    uint8_t *data_out,
+    uint8_t* data_out,
     size_t data_size,
     uint64_t sector)
 {
     int ret = -1;
     const mbedtls_cipher_info_t* ci;
-    mbedtls_cipher_context_t cipher_ctx;
+    mbedtls_cipher_context_t ctx;
     uint8_t iv[LUKS_IV_SIZE];
     uint64_t i;
     uint64_t iters;
-    uint64_t block_len;
+    uint64_t block_size;
 
-    mbedtls_cipher_init(&cipher_ctx);
+    mbedtls_cipher_init(&ctx);
 
     if (!(ci = _get_cipher_info(hdr)))
         GOTO(done);
 
-    if (mbedtls_cipher_setup(&cipher_ctx, ci) != 0)
+    if (mbedtls_cipher_setup(&ctx, ci) != 0)
         GOTO(done);
 
     const size_t key_bits = hdr->key_bytes * 8;
 
-    if (mbedtls_cipher_setkey(&cipher_ctx, key->buf, key_bits, op) != 0)
+    if (mbedtls_cipher_setkey(&ctx, key->buf, key_bits, op) != 0)
         GOTO(done);
 
-    iters = data_size / VIC_SECTOR_SIZE;
-    block_len = VIC_SECTOR_SIZE;
+    if (strcmp(hdr->cipher_mode, LUKS_CIPHER_MODE_CBC_PLAIN) == 0 &&
+        mbedtls_cipher_set_padding_mode(&ctx, MBEDTLS_PADDING_NONE) != 0)
+    {
+        GOTO(done);
+    }
 
+    /* Determine the block size */
     if (strcmp(hdr->cipher_mode, LUKS_CIPHER_MODE_ECB) == 0)
     {
         iters = 1;
-        block_len = data_size;
+        block_size = mbedtls_cipher_get_block_size(&ctx);
     }
+    else
+    {
+        block_size = VIC_SECTOR_SIZE;
+    }
+
+    iters = data_size / block_size;
 
     for (i = 0; i < iters; i++)
     {
         uint64_t pos;
         size_t olen;
+        int r;
 
         if (_gen_iv(hdr, sector + i, iv, key->buf) == -1)
             GOTO(done);
 
-        pos = i * block_len;
+        pos = i * block_size;
 
-        if (mbedtls_cipher_crypt(
-            &cipher_ctx,
+        if ((r = mbedtls_cipher_crypt(
+            &ctx,
             iv, /* iv */
             LUKS_IV_SIZE, /* iv_size */
             data_in + pos, /* input */
-            block_len, /* ilen */
+            block_size, /* ilen */
             data_out + pos, /* output */
-            &olen) != 0) /* olen */
+            &olen)) != 0) /* olen */
         {
+            printf("r=%d\n", r);
+            printf("%d\n", MBEDTLS_ERR_CIPHER_FULL_BLOCK_EXPECTED);
             GOTO(done);
         }
+
+        if (olen != block_size)
+            GOTO(done);
     }
 
     ret = 0;
 
 done:
-    mbedtls_cipher_free(&cipher_ctx);
+    mbedtls_cipher_free(&ctx);
 
     return ret;
 }
@@ -794,11 +807,8 @@ static int _add_key(
         GOTO(done);
 
     ks = &hdr->keyslots[index];
-
     ks->active = LUKS_KEY_ENABLED;
-
     ks->iterations = slot_iterations;
-
     vic_luks_random(ks->salt, LUKS_SALT_SIZE);
 
     if ((size = hdr->key_bytes * ks->stripes) == 0)
@@ -1448,6 +1458,16 @@ vic_result_t luks1_open(
             strcmp(hdr->cipher_mode, LUKS_CIPHER_MODE_CBC_PLAIN) == 0)
         {
             vic_strlcpy(cipher, "serpent-cbc-plain", sizeof(cipher));
+        }
+        else if (strcmp(hdr->cipher_name, LUKS_CIPHER_NAME_AES) == 0 &&
+            strcmp(hdr->cipher_mode, LUKS_CIPHER_MODE_CBC_PLAIN) == 0)
+        {
+            vic_strlcpy(cipher, "aes-cbc-plain", sizeof(cipher));
+        }
+        else if (strcmp(hdr->cipher_name, LUKS_CIPHER_NAME_AES) == 0 &&
+            strcmp(hdr->cipher_mode, LUKS_CIPHER_MODE_ECB) == 0)
+        {
+            vic_strlcpy(cipher, "aes-ecb", sizeof(cipher));
         }
         else
         {

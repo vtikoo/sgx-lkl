@@ -237,11 +237,10 @@ vic_result_t vic_luks_format(
 
         CHECK(_split_cipher(cipher, cipher_name, cipher_mode));
 
-        /* ATTN: support other ciphers */
         CHECK(luks1_format(
             device,
-            LUKS_CIPHER_NAME_AES,
-            LUKS_CIPHER_MODE_XTS_PLAIN64,
+            cipher_name,
+            cipher_mode,
             uuid,
             hash,
             mk_iterations,
@@ -372,7 +371,10 @@ done:
     return result;
 }
 
-vic_result_t vic_luks_load_key(const char* path, vic_key_t* key, size_t* key_size)
+vic_result_t vic_luks_load_key(
+    const char* path,
+    vic_key_t* key,
+    size_t* key_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     struct stat st;
@@ -390,7 +392,7 @@ vic_result_t vic_luks_load_key(const char* path, vic_key_t* key, size_t* key_siz
     if (!(is = fopen(path, "rb")))
         RAISE(VIC_FAILED);
 
-    if (fread(key, 1, sizeof(vic_key_t), is) != sizeof(vic_key_t))
+    if (fread(key, 1, st.st_size, is) != (size_t)st.st_size)
         RAISE(VIC_FAILED);
 
     *key_size = st.st_size;
