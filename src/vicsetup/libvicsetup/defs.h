@@ -1,8 +1,6 @@
 #ifndef _VIC_DEFS_H
 #define _VIC_DEFS_H
 
-#define VIC_INLINE static __inline__
-
 #define VIC_COUNTOF(ARR) (sizeof(ARR) / sizeof(ARR[0]))
 
 #define VIC_OFFSETOF(TYPE, MEMBER) __builtin_offsetof(TYPE, MEMBER)

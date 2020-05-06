@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <vic.h>
 #include "vec.h"
 #include "defs.h"
 

@@ -108,6 +108,8 @@ const char* vic_result_string(vic_result_t result)
             return "VIC_BAD_SIGNATURE";
         case VIC_BAD_CIPHER:
             return "VIC_BAD_CIPHER";
+        case VIC_BAD_BLOCK_DEVICE:
+            return "VIC_BAD_BLOCK_DEVICE";
     };
 
     /* Unreachable */

@@ -4,8 +4,19 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <limits.h>
 
 #define VIC_SECTOR_SIZE 512
+
+#define VIC_INLINE static __inline__
+
+/*
+**==============================================================================
+**
+** vic_result_t
+**
+**==============================================================================
+*/
 
 typedef enum _vic_result
 {
@@ -61,8 +72,17 @@ typedef enum _vic_result
     VIC_IOCTL_FAILED,
     VIC_BAD_SIGNATURE,
     VIC_BAD_CIPHER,
+    VIC_BAD_BLOCK_DEVICE,
 }
 vic_result_t;
+
+/*
+**==============================================================================
+**
+** vic_device_t:
+**
+**==============================================================================
+*/
 
 typedef struct _vic_device vic_device_t;
 
@@ -89,12 +109,114 @@ struct _vic_device
     size_t (*count)(vic_device_t* device);
 };
 
+vic_device_t* vic_open_device(const char* path);
+
+int vic_close_device(vic_device_t* device);
+
+const char* vic_get_device_path(vic_device_t* device);
+
+/*
+**==============================================================================
+**
+** vic_blockdev_t
+**
+**==============================================================================
+*/
+
+typedef struct _vic_blockdev vic_blockdev_t;
+
+typedef struct _vic_blockdev
+{
+    vic_result_t (*bd_get_path)(
+        const vic_blockdev_t* dev,
+        char path[PATH_MAX]);
+
+    vic_result_t (*bd_get_block_size)(
+        const vic_blockdev_t* dev,
+        size_t* block_size);
+
+    vic_result_t (*bd_set_block_size)(
+        vic_blockdev_t* dev,
+        size_t block_size);
+
+    vic_result_t (*bd_get_byte_size)(
+        const vic_blockdev_t* dev,
+        size_t* byte_size);
+
+    vic_result_t (*bd_get)(
+        vic_blockdev_t* dev,
+        uint64_t blkno,
+        void* blocks,
+        size_t nblocks);
+
+    vic_result_t (*bd_put)(
+        vic_blockdev_t* dev,
+        uint64_t blkno,
+        const void* blocks,
+        size_t nblocks);
+
+    vic_result_t (*bd_close)(vic_blockdev_t* dev);
+}
+vic_blockdev_t;
+
+vic_result_t vic_blockdev_open(
+    const char* path,
+    bool readonly,
+    size_t block_size, /* defaults to 512 if zero */
+    vic_blockdev_t** dev);
+
+vic_result_t vic_blockdev_get_path(
+    const vic_blockdev_t* dev,
+    char path[PATH_MAX]);
+
+vic_result_t vic_blockdev_get_block_size(
+    vic_blockdev_t* dev,
+    size_t* block_size);
+
+vic_result_t vic_blockdev_set_block_size(
+    vic_blockdev_t* dev,
+    size_t block_size);
+
+vic_result_t vic_blockdev_get_byte_size(
+    vic_blockdev_t* dev,
+    size_t* byte_size);
+
+vic_result_t vic_blockdev_get(
+    vic_blockdev_t* dev,
+    uint64_t blkno,
+    void* blocks,
+    size_t nblocks);
+
+vic_result_t vic_blockdev_put(
+    vic_blockdev_t* dev,
+    uint64_t blkno,
+    const void* blocks,
+    size_t nblocks);
+
+vic_result_t vic_blockdev_close(vic_blockdev_t* dev);
+
+/*
+**==============================================================================
+**
+** vic_key_t
+**
+**==============================================================================
+*/
+
 typedef struct vic_key
 {
     /* 512 bits */
     uint8_t buf[64];
 }
 vic_key_t;
+
+/*
+**==============================================================================
+**
+** LUKS interface:
+**
+**==============================================================================
+*/
 
 typedef enum vic_luks_version
 {
@@ -123,12 +245,6 @@ typedef enum vic_integrity
 vic_integrity_t;
 
 const char* vic_result_string(vic_result_t result);
-
-vic_device_t* vic_open_device(const char* path);
-
-int vic_close_device(vic_device_t* device);
-
-const char* vic_get_device_path(vic_device_t* device);
 
 vic_result_t vic_luks_dump(vic_device_t* device);
 
