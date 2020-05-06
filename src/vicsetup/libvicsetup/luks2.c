@@ -111,11 +111,6 @@ uint32_t vic_luks_checksum(const void* data, size_t size)
     return n;
 }
 
-static bool _is_valid_device(vic_device_t* device)
-{
-    return device && device->get && device->put && device->count;
-}
-
 static bool _is_valid_luks2_hdr(const luks2_hdr_t* hdr, bool swap)
 {
     if (!hdr)
@@ -1629,16 +1624,16 @@ static sec_hdr_offset_t _sec_hdr_offsets[] =
 };
 
 static int _read_binary_hdr(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks2_hdr_t* hdr,
     bool primary)
 {
     int ret = -1;
     size_t blkno =  primary ? 0 : (DEFAULT_HDR_SIZE / VIC_SECTOR_SIZE);
-    vic_block_t blocks[sizeof(luks2_hdr_t) / VIC_SECTOR_SIZE];
-    const size_t nblocks = VIC_COUNTOF(blocks);
+    uint8_t blocks[sizeof(luks2_hdr_t)];
+    const size_t nblocks = sizeof(blocks) / VIC_SECTOR_SIZE;
 
-    if (device->get(device, blkno, blocks, nblocks) != 0)
+    if (vic_blockdev_get(device, blkno, blocks, nblocks) != VIC_OK)
         GOTO(done);
 
     VIC_STATIC_ASSERT(sizeof(luks2_hdr_t) <= sizeof(blocks));
@@ -1657,12 +1652,13 @@ done:
 }
 
 static int _write_binary_hdr(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const luks2_hdr_t* hdr,
     bool primary)
 {
     int ret = -1;
-    vic_block_t blocks[sizeof(luks2_hdr_t) / VIC_SECTOR_SIZE];
+    uint8_t blocks[sizeof(luks2_hdr_t)];
+    size_t nblocks = sizeof(blocks) / VIC_SECTOR_SIZE;
     luks2_hdr_t buf;
     size_t blkno = primary ? 0 : hdr->hdr_size / VIC_SECTOR_SIZE;
 
@@ -1673,7 +1669,7 @@ static int _write_binary_hdr(
     memset(blocks, 0, sizeof(blocks));
     memcpy(blocks, &buf, sizeof(luks2_hdr_t));
 
-    if (device->put(device, blkno, blocks, VIC_COUNTOF(blocks)) != 0)
+    if (vic_blockdev_put(device, blkno, blocks, nblocks) != VIC_OK)
         GOTO(done);
 
     ret = 0;
@@ -1683,17 +1679,17 @@ done:
 }
 
 static int _read_json_area(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const luks2_hdr_t* hdr,
     char* json_data,
     size_t json_size)
 {
     int ret = -1;
     size_t blkno = (sizeof(luks2_hdr_t) + hdr->hdr_offset) / VIC_SECTOR_SIZE;
-    vic_block_t* blocks = (vic_block_t*)json_data;
+    void* blocks = json_data;
     const size_t nblocks = json_size / VIC_SECTOR_SIZE;
 
-    if (device->get(device, blkno, blocks, nblocks) != 0)
+    if (vic_blockdev_get(device, blkno, blocks, nblocks) != 0)
         GOTO(done);
 
     ret = 0;
@@ -1703,17 +1699,17 @@ done:
 }
 
 static int _write_json_area(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const luks2_hdr_t* hdr,
     const char* json_data,
     size_t json_size)
 {
     int ret = -1;
     size_t blkno = (sizeof(luks2_hdr_t) + hdr->hdr_offset) / VIC_SECTOR_SIZE;
-    const vic_block_t* blocks = (const vic_block_t*)json_data;
+    const void* blocks = json_data;
     const size_t nblocks = json_size / VIC_SECTOR_SIZE;
 
-    if (device->put(device, blkno, blocks, nblocks) != 0)
+    if (vic_blockdev_put(device, blkno, blocks, nblocks) != 0)
         GOTO(done);
 
     ret = 0;
@@ -1723,7 +1719,7 @@ done:
 }
 
 static int _read_key_material(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     uint64_t offset,
     uint64_t size,
     void* buf)
@@ -1738,7 +1734,7 @@ static int _read_key_material(
         uint64_t blkno = offset / VIC_SECTOR_SIZE;
         size_t nblocks = size / VIC_SECTOR_SIZE;
 
-        if (device->get(device, blkno, buf, nblocks) != 0)
+        if (vic_blockdev_get(device, blkno, buf, nblocks) != 0)
             GOTO(done);
     }
 
@@ -1749,7 +1745,7 @@ done:
 }
 
 static int _write_key_material(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const luks2_keyslot_t* ks,
     const void* buf)
 {
@@ -1766,7 +1762,7 @@ static int _write_key_material(
 
         if (buf)
         {
-            if (device->put(device, blkno, buf, nblocks) != 0)
+            if (vic_blockdev_put(device, blkno, buf, nblocks) != 0)
                 GOTO(done);
         }
         else
@@ -1774,7 +1770,7 @@ static int _write_key_material(
             if (!(zeros = calloc(ks->area.size, 1)))
                 GOTO(done);
 
-            if (device->put(device, blkno, zeros, nblocks) != 0)
+            if (vic_blockdev_put(device, blkno, zeros, nblocks) != 0)
                 GOTO(done);
         }
     }
@@ -1789,7 +1785,23 @@ done:
     return ret;
 }
 
-int luks2_read_hdr(vic_device_t* device, luks2_hdr_t** hdr_out)
+static bool _is_valid_device(vic_blockdev_t* dev)
+{
+    size_t block_size;
+
+    if (!dev)
+        return false;
+
+    if (vic_blockdev_get_block_size(dev, &block_size) != VIC_OK)
+        return false;
+
+    if (block_size != VIC_SECTOR_SIZE)
+        return false;
+
+    return true;
+}
+
+int luks2_read_hdr(vic_blockdev_t* device, luks2_hdr_t** hdr_out)
 {
     int ret = -1;
     luks2_hdr_t hdr;
@@ -2234,7 +2246,7 @@ static const luks2_digest_t* _find_digest(
 }
 
 static vic_result_t _find_key_by_pwd(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks2_ext_hdr_t* ext,
     const char* pwd,
     vic_key_t* key,
@@ -2425,7 +2437,7 @@ done:
 }
 
 vic_result_t luks2_recover_master_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* pwd,
     vic_key_t* master_key,
     size_t* master_key_bytes)
@@ -2867,15 +2879,14 @@ done:
 }
 
 static vic_result_t _get_payload_size_in_sectors(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     uint64_t payload_offset,
     uint64_t* payload_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     size_t num_sectors;
 
-    if ((num_sectors = device->count(device)) == (size_t)-1)
-        RAISE(VIC_DEVICE_COUNT_FAILED);
+    CHECK(vic_blockdev_get_num_blocks(device, &num_sectors));
 
     if (payload_offset >= num_sectors)
         RAISE(VIC_DEVICE_TOO_SMALL);
@@ -2889,12 +2900,12 @@ done:
 }
 
 static int _clear_integrity_superblock(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks2_ext_hdr_t* ext)
 {
     int ret = -1;
     uint64_t blkno;
-    vic_block_t blk;
+    uint8_t blk[VIC_SECTOR_SIZE];
 
     if (!device || !ext)
         goto done;
@@ -2905,7 +2916,7 @@ static int _clear_integrity_superblock(
     /* Write the block */
     memset(&blk, 0, sizeof(blk));
 
-    if (device->put(device, blkno, &blk, 1) != 0)
+    if (vic_blockdev_put(device, blkno, blk, 1) != VIC_OK)
         goto done;
 
     ret = 0;
@@ -2934,12 +2945,12 @@ static int _gen_dev_name(
 }
 
 static int _format_integrity_device(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks2_ext_hdr_t* ext)
 {
     int result = VIC_UNEXPECTED;
     char name[PATH_MAX];
-    const char* path;
+    char path[PATH_MAX];
     const size_t start = 0;
     const size_t size = 8; /* let dm-integrity determine the size */
     size_t offset;
@@ -2954,8 +2965,7 @@ static int _format_integrity_device(
         RAISE(VIC_BUFFER_TOO_SMALL);
 
     /* Get the path from the device */
-    if (!(path = vic_get_device_path(device)))
-        RAISE(VIC_UNEXPECTED);
+    CHECK(vic_blockdev_get_path(device, path));
 
     /* Get the payload offset in sectors */
     offset = ext->segments[0].offset / VIC_SECTOR_SIZE;
@@ -2974,13 +2984,13 @@ done:
 }
 
 static int _open_integrity_device(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks2_ext_hdr_t* ext,
     const char* name,
     char mode)
 {
     int result = VIC_UNEXPECTED;
-    const char* path;
+    char path[PATH_MAX];
     size_t size;
     size_t offset;
     vic_integrity_sb_t sb;
@@ -2995,9 +3005,7 @@ static int _open_integrity_device(
     /* Set the device size */
     size = sb.provided_data_sectors;
 
-    /* Get the path from the device */
-    if (!(path = vic_get_device_path(device)))
-        RAISE(VIC_UNEXPECTED);
+    CHECK(vic_blockdev_get_path(device, path));
 
     /* Get the payload offset in sectors */
     offset = ext->segments[0].offset / VIC_SECTOR_SIZE;
@@ -3017,7 +3025,7 @@ done:
 }
 
 static vic_result_t _open_integrity_luks2_device(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks2_ext_hdr_t* ext,
     const char* name,
     const char* path,
@@ -3121,7 +3129,7 @@ done:
 }
 
 vic_result_t luks2_format(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* cipher,
     const char* keyslot_cipher,
     const char* uuid,
@@ -3190,8 +3198,7 @@ vic_result_t luks2_format(
         pbkdf_memory = DEFAULT_PBKDF_MEMORY;
 
     /* Get the number of sectors in the device */
-    if ((num_device_blocks = device->count(device)) == (size_t)-1)
-        RAISE(VIC_UNEXPECTED);
+    CHECK(vic_blockdev_get_num_blocks(device, &num_device_blocks));
 
     /* Verify that the device is big enough */
     if (num_device_blocks * VIC_SECTOR_SIZE < MIN_DEVICE_BYTES)
@@ -3356,7 +3363,7 @@ static size_t _find_free_keyslot(luks2_ext_hdr_t* ext)
     return (size_t)-1;
 }
 
-static vic_result_t _write_hdr(vic_device_t* device, luks2_ext_hdr_t* ext)
+static vic_result_t _write_hdr(vic_blockdev_t* device, luks2_ext_hdr_t* ext)
 {
     vic_result_t result = VIC_UNEXPECTED;
     char* json = NULL;
@@ -3464,7 +3471,7 @@ done:
 }
 
 vic_result_t luks2_add_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
@@ -3550,7 +3557,7 @@ done:
 }
 
 vic_result_t luks2_change_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* old_pwd,
     const char* new_pwd)
 {
@@ -3598,7 +3605,7 @@ done:
     return result;
 }
 
-vic_result_t luks2_remove_key(vic_device_t* device, const char* pwd)
+vic_result_t luks2_remove_key(vic_blockdev_t* device, const char* pwd)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks2_ext_hdr_t* ext = NULL;
@@ -3662,7 +3669,7 @@ done:
     return result;
 }
 
-vic_result_t luks2_stat(vic_device_t* device, vic_luks_stat_t* buf)
+vic_result_t luks2_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks2_ext_hdr_t* ext = NULL;
@@ -3670,14 +3677,13 @@ vic_result_t luks2_stat(vic_device_t* device, vic_luks_stat_t* buf)
     size_t nbytes;
     size_t offset;
 
-    if (!vic_luks_is_valid_device(device) || !buf)
+    if (!_is_valid_device(device) || !buf)
         RAISE(VIC_BAD_PARAMETER);
 
     if (luks2_read_hdr(device, (luks2_hdr_t**)&ext) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
-    if ((nblocks = device->count(device)) == (size_t)-1)
-        RAISE(VIC_DEVICE_COUNT_FAILED);
+    CHECK(vic_blockdev_get_num_blocks(device, &nblocks));
 
     nbytes = nblocks * VIC_SECTOR_SIZE;
     offset = ext->segments[0].offset;
@@ -3696,7 +3702,7 @@ done:
 }
 
 vic_result_t luks2_open(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* path,
     const char* name,
     const vic_key_t* master_key,

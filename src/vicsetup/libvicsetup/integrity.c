@@ -21,15 +21,21 @@ static uint64_t _inverse_log2(uint8_t log)
 }
 
 vic_result_t vic_read_integrity_sb(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     uint64_t offset,
     vic_integrity_sb_t* sb)
 {
     vic_result_t result = VIC_UNEXPECTED;
     const uint64_t blkno = offset / VIC_SECTOR_SIZE;
-    vic_block_t blk;
+    uint8_t blk[VIC_SECTOR_SIZE];
+    size_t block_size;
 
-    if (device->get(device, blkno, &blk, 1) != 0)
+    CHECK(vic_blockdev_get_block_size(device, &block_size));
+
+    if (block_size != VIC_SECTOR_SIZE)
+        RAISE(VIC_BAD_BLOCK_SIZE);
+
+    if (vic_blockdev_get(device, blkno, blk, 1) != 0)
         RAISE(VIC_FAILED);
 
     memcpy(sb, &blk, sizeof(vic_integrity_sb_t));

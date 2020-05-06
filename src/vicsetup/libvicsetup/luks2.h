@@ -167,18 +167,18 @@ luks2_ext_hdr_t;
 
 VIC_STATIC_ASSERT(sizeof(luks2_hdr_t) == 4096);
 
-int luks2_read_hdr(vic_device_t* device, luks2_hdr_t** hdr_out);
+int luks2_read_hdr(vic_blockdev_t* device, luks2_hdr_t** hdr_out);
 
 int luks2_dump_hdr(const luks2_hdr_t* hdr);
 
 vic_result_t luks2_recover_master_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* pwd,
     vic_key_t* master_key,
     size_t* master_key_bytes);
 
 vic_result_t luks2_format(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* cipher,
     const char* keyslot_cipher,
     const char* uuid,
@@ -192,7 +192,7 @@ vic_result_t luks2_format(
     uint32_t flags);
 
 vic_result_t luks2_add_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
@@ -200,16 +200,16 @@ vic_result_t luks2_add_key(
     const char* new_pwd);
 
 vic_result_t luks2_change_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* old_pwd,
     const char* new_pwd);
 
-vic_result_t luks2_remove_key(vic_device_t* device, const char* pwd);
+vic_result_t luks2_remove_key(vic_blockdev_t* device, const char* pwd);
 
-vic_result_t luks2_stat(vic_device_t* device, vic_luks_stat_t* buf);
+vic_result_t luks2_stat(vic_blockdev_t* device, vic_luks_stat_t* buf);
 
 vic_result_t luks2_open(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* path,
     const char* name,
     const vic_key_t* master_key,

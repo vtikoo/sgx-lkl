@@ -29,8 +29,6 @@ typedef struct vic_luks_hdr
 }
 vic_luks_hdr_t;
 
-bool vic_luks_is_valid_device(vic_device_t* device);
-
-int vic_luks_read_hdr(vic_device_t* device, vic_luks_hdr_t* hdr);
+int vic_luks_read_hdr(vic_blockdev_t* device, vic_luks_hdr_t* hdr);
 
 #endif /* _VIC_LUKSCOMMON_H */

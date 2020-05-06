@@ -44,7 +44,7 @@ vic_integrity_sb_t;
 VIC_PACK_END
 
 vic_result_t vic_read_integrity_sb(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     uint64_t offset,
     vic_integrity_sb_t* sb);
 

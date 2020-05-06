@@ -115,7 +115,7 @@ void dump_args(int argc, const char* argv[])
 
 static int luksDump(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_result_t r;
     bool dump_payload = false;
 
@@ -134,7 +134,7 @@ static int luksDump(int argc, const char* argv[])
         exit(1);
     }
 
-    if (!(dev = vic_open_device(argv[2])))
+    if (vic_blockdev_open(argv[2], false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", argv[2]);
 
     if ((r = vic_luks_dump(dev)) != VIC_OK)
@@ -145,7 +145,7 @@ static int luksDump(int argc, const char* argv[])
     {
         vic_luks_stat_t buf;
         size_t blkno;
-        size_t nblocks;
+        size_t num_blocks;
         FILE* os;
 
         if (vic_luks_stat(dev, &buf) != VIC_OK)
@@ -158,17 +158,17 @@ static int luksDump(int argc, const char* argv[])
         printf("  payload_data:\n");
 
         blkno = buf.payload_offset / VIC_SECTOR_SIZE;
-        nblocks = buf.payload_size / VIC_SECTOR_SIZE;
+        num_blocks = buf.payload_size / VIC_SECTOR_SIZE;
 
         if (!(os = fopen("/tmp/integrt", "wb")))
             err("failed to open /tmp/integrt");
 
-        for (size_t i = blkno; i < blkno + nblocks; i++)
+        for (size_t i = blkno; i < blkno + num_blocks; i++)
         {
-            vic_block_t blk;
+            uint8_t blk[VIC_SECTOR_SIZE];
             const size_t indent = 2;
 
-            if (dev->get(dev, i, &blk, 1) != 0)
+            if (vic_blockdev_get(dev, i, blk, 1) != 0)
                 err("failed to read block %zu\n", i);
 
             printf("    [BLOCK %zu]\n", i);
@@ -183,14 +183,14 @@ static int luksDump(int argc, const char* argv[])
         printf("}\n");
     }
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     return 0;
 }
 
 static int luksFormat(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_luks_version_t version = LUKS_VERSION_1;
     const char* cipher = NULL;
     const char* keyslot_cipher = NULL;
@@ -293,7 +293,7 @@ static int luksFormat(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (!(dev = vic_open_device(luksfile)))
+    if (vic_blockdev_open(luksfile, false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_format(
@@ -314,14 +314,14 @@ static int luksFormat(int argc, const char* argv[])
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     return 0;
 }
 
 static int luksGetMasterKey(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_result_t r;
     vic_key_t key;
     size_t key_size;
@@ -340,7 +340,7 @@ static int luksGetMasterKey(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (!(dev = vic_open_device(luksfile)))
+    if (vic_blockdev_open(luksfile, false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_recover_master_key(
@@ -354,14 +354,14 @@ static int luksGetMasterKey(int argc, const char* argv[])
 
     vic_hexdump(&key.buf, key_size);
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     return 0;
 }
 
 static int luksAddKey(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_result_t r;
     const char* keyslot_cipher = NULL;
     uint64_t slot_iterations = 0;
@@ -394,7 +394,7 @@ static int luksAddKey(int argc, const char* argv[])
     const char* pwd = argv[3];
     const char* new_pwd = argv[4];
 
-    if (!(dev = vic_open_device(luksfile)))
+    if (vic_blockdev_open(luksfile, false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_add_key(dev, keyslot_cipher, slot_iterations,
@@ -403,14 +403,14 @@ static int luksAddKey(int argc, const char* argv[])
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     return 0;
 }
 
 static int luksChangeKey(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_result_t r;
 
     /* Check usage */
@@ -428,7 +428,7 @@ static int luksChangeKey(int argc, const char* argv[])
     const char* old_pwd = argv[3];
     const char* new_pwd = argv[4];
 
-    if (!(dev = vic_open_device(luksfile)))
+    if (vic_blockdev_open(luksfile, false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_change_key(
@@ -439,14 +439,14 @@ static int luksChangeKey(int argc, const char* argv[])
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     return 0;
 }
 
 static int luksRemoveKey(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_result_t r;
 
     /* Check usage */
@@ -463,7 +463,7 @@ static int luksRemoveKey(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (!(dev = vic_open_device(luksfile)))
+    if (vic_blockdev_open(luksfile, false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_remove_key(dev, pwd)) != VIC_OK)
@@ -471,14 +471,14 @@ static int luksRemoveKey(int argc, const char* argv[])
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     return 0;
 }
 
 static int luksOpen(int argc, const char* argv[])
 {
-    vic_device_t* dev;
+    vic_blockdev_t* dev;
     vic_result_t r;
     vic_key_t key;
     size_t key_size;
@@ -498,7 +498,7 @@ static int luksOpen(int argc, const char* argv[])
     const char* pwd = argv[3];
     const char* name = argv[4];
 
-    if (!(dev = vic_open_device(luksfile)))
+    if (vic_blockdev_open(luksfile, false, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_recover_master_key(
@@ -510,7 +510,7 @@ static int luksOpen(int argc, const char* argv[])
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
 
-    vic_close_device(dev);
+    vic_blockdev_close(dev);
 
     if ((r = vic_luks_open(luksfile, name, &key, key_size)) != VIC_OK)
         err("%s() failed: %s\n", argv[1], vic_result_string(r));

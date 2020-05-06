@@ -73,47 +73,9 @@ typedef enum _vic_result
     VIC_BAD_SIGNATURE,
     VIC_BAD_CIPHER,
     VIC_BAD_BLOCK_DEVICE,
+    VIC_BAD_BLOCK_SIZE,
 }
 vic_result_t;
-
-/*
-**==============================================================================
-**
-** vic_device_t:
-**
-**==============================================================================
-*/
-
-typedef struct _vic_device vic_device_t;
-
-typedef struct _vic_block
-{
-    uint8_t buf[VIC_SECTOR_SIZE];
-}
-vic_block_t;
-
-struct _vic_device
-{
-    int (*get)(
-        vic_device_t* device,
-        uint64_t blkno,
-        vic_block_t* blocks,
-        size_t nblocks);
-
-    int (*put)(
-        vic_device_t* device,
-        uint64_t blkno,
-        const vic_block_t* blocks,
-        size_t nblocks);
-
-    size_t (*count)(vic_device_t* device);
-};
-
-vic_device_t* vic_open_device(const char* path);
-
-int vic_close_device(vic_device_t* device);
-
-const char* vic_get_device_path(vic_device_t* device);
 
 /*
 **==============================================================================
@@ -143,6 +105,10 @@ typedef struct _vic_blockdev
         const vic_blockdev_t* dev,
         size_t* byte_size);
 
+    vic_result_t (*bd_get_num_blocks)(
+        const vic_blockdev_t* dev,
+        size_t* num_blocks);
+
     vic_result_t (*bd_get)(
         vic_blockdev_t* dev,
         uint64_t blkno,
@@ -170,7 +136,7 @@ vic_result_t vic_blockdev_get_path(
     char path[PATH_MAX]);
 
 vic_result_t vic_blockdev_get_block_size(
-    vic_blockdev_t* dev,
+    const vic_blockdev_t* dev,
     size_t* block_size);
 
 vic_result_t vic_blockdev_set_block_size(
@@ -178,8 +144,12 @@ vic_result_t vic_blockdev_set_block_size(
     size_t block_size);
 
 vic_result_t vic_blockdev_get_byte_size(
-    vic_blockdev_t* dev,
+    const vic_blockdev_t* dev,
     size_t* byte_size);
+
+vic_result_t vic_blockdev_get_num_blocks(
+    vic_blockdev_t* dev,
+    size_t* num_blocks);
 
 vic_result_t vic_blockdev_get(
     vic_blockdev_t* dev,
@@ -246,7 +216,7 @@ vic_integrity_t;
 
 const char* vic_result_string(vic_result_t result);
 
-vic_result_t vic_luks_dump(vic_device_t* device);
+vic_result_t vic_luks_dump(vic_blockdev_t* device);
 
 vic_result_t vic_luks_load_key(
     const char* path,
@@ -254,7 +224,7 @@ vic_result_t vic_luks_load_key(
     size_t* key_size);
 
 vic_result_t vic_luks_format(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     vic_luks_version_t version,
     const char* cipher,
     const char* keyslot_cipher,
@@ -269,13 +239,13 @@ vic_result_t vic_luks_format(
     vic_integrity_t integrity);
 
 vic_result_t vic_luks_recover_master_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* pwd,
     vic_key_t* master_key,
     size_t* master_key_bytes);
 
 vic_result_t vic_luks_add_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
@@ -283,15 +253,15 @@ vic_result_t vic_luks_add_key(
     const char* new_pwd);
 
 vic_result_t vic_luks_remove_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* pwd);
 
 vic_result_t vic_luks_change_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* old_pwd,
     const char* new_pwd);
 
-vic_result_t vic_luks_stat(vic_device_t* device, vic_luks_stat_t* buf);
+vic_result_t vic_luks_stat(vic_blockdev_t* device, vic_luks_stat_t* buf);
 
 vic_result_t vic_luks_open(
     const char* path,

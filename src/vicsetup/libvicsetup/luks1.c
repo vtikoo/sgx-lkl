@@ -61,9 +61,20 @@
 
 static uint8_t _magic_1st[LUKS_MAGIC_SIZE] = LUKS_MAGIC_1ST;
 
-static bool _is_valid_device(vic_device_t* device)
+static bool _is_valid_device(vic_blockdev_t* dev)
 {
-    return device && device->get && device->put && device->count;
+    size_t block_size;
+
+    if (!dev)
+        return false;
+
+    if (vic_blockdev_get_block_size(dev, &block_size) != VIC_OK)
+        return false;
+
+    if (block_size != VIC_SECTOR_SIZE)
+        return false;
+
+    return true;
 }
 
 static bool _is_valid_luks1_hdr(const luks1_hdr_t* hdr, bool swap)
@@ -521,11 +532,11 @@ static int _decrypt(
     return _crypt(hdr, op, key, data_in, data_out, data_size, sector);
 }
 
-int luks1_read_hdr(vic_device_t* device, luks1_hdr_t** hdr_out)
+int luks1_read_hdr(vic_blockdev_t* device, luks1_hdr_t** hdr_out)
 {
     int ret = -1;
-    vic_block_t blocks[2];
-    const size_t nblocks = VIC_COUNTOF(blocks);
+    uint8_t blocks[VIC_SECTOR_SIZE * 2];
+    const size_t nblocks = 2;
     luks1_hdr_t hdr;
 
     if (hdr_out)
@@ -536,7 +547,7 @@ int luks1_read_hdr(vic_device_t* device, luks1_hdr_t** hdr_out)
         GOTO(done);
 
     /* Read two blocks to obtain enough bytes for the header */
-    if (device->get(device, 0, blocks, nblocks) != 0)
+    if (vic_blockdev_get(device, 0, blocks, nblocks) != VIC_OK)
         GOTO(done);
 
     VIC_STATIC_ASSERT(sizeof(luks1_hdr_t) <= sizeof(blocks));
@@ -560,10 +571,11 @@ done:
     return ret;
 }
 
-static int _write_luks1_hdr(vic_device_t* device, const luks1_hdr_t* hdr)
+static int _write_luks1_hdr(vic_blockdev_t* device, const luks1_hdr_t* hdr)
 {
     int ret = -1;
-    vic_block_t blocks[2];
+    uint8_t blocks[VIC_SECTOR_SIZE * 2];
+    size_t nblocks = 2;
     luks1_hdr_t buf;
 
     if (!device || !hdr)
@@ -574,7 +586,7 @@ static int _write_luks1_hdr(vic_device_t* device, const luks1_hdr_t* hdr)
     memset(blocks, 0, sizeof(blocks));
     memcpy(blocks, &buf, sizeof(luks1_hdr_t));
 
-    if (device->put(device, 0, blocks, VIC_COUNTOF(blocks)) != 0)
+    if (vic_blockdev_put(device, 0, blocks, nblocks) != 0)
         GOTO(done);
 
     ret = 0;
@@ -584,7 +596,7 @@ done:
 }
 
 static int _write_key_material(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const luks1_hdr_t* hdr,
     const vic_luks_keyslot_t* ks,
     const void* buf)
@@ -602,7 +614,7 @@ static int _write_key_material(
 
         if (buf)
         {
-            if (device->put(device, blkno, buf, nblocks) != 0)
+            if (vic_blockdev_put(device, blkno, buf, nblocks) != VIC_OK)
                 GOTO(done);
         }
         else
@@ -610,7 +622,7 @@ static int _write_key_material(
             if (!(zeros = calloc(ks->stripes * hdr->key_bytes, 1)))
                 GOTO(done);
 
-            if (device->put(device, blkno, zeros, nblocks) != 0)
+            if (vic_blockdev_put(device, blkno, zeros, nblocks) != 0)
                 GOTO(done);
         }
     }
@@ -626,7 +638,7 @@ done:
 }
 
 static int _read_key_material(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const luks1_hdr_t* hdr,
     const vic_luks_keyslot_t* ks,
     void* buf)
@@ -641,7 +653,7 @@ static int _read_key_material(
         uint64_t blkno = ks->key_material_offset;
         size_t nblocks = (ks->stripes * hdr->key_bytes) / VIC_SECTOR_SIZE;
 
-        if (device->get(device, blkno, buf, nblocks) != 0)
+        if (vic_blockdev_get(device, blkno, buf, nblocks) != VIC_OK)
             GOTO(done);
     }
 
@@ -873,7 +885,7 @@ done:
 }
 
 static vic_result_t _find_key_by_pwd(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     luks1_hdr_t* hdr,
     const char* pwd,
     vic_key_t* master_key,
@@ -1000,7 +1012,7 @@ done:
 */
 
 vic_result_t luks1_format(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* cipher_name,
     const char* cipher_mode,
     const char* uuid,
@@ -1065,12 +1077,11 @@ vic_result_t luks1_format(
 
     /* Verify that there is enough room for at least 1 payload block */
     {
-        size_t count;
+        size_t num_blocks;
 
-        if ((count = device->count(device)) == (size_t)-1)
-            RAISE(VIC_DEVICE_COUNT_FAILED);
+        CHECK(vic_blockdev_get_num_blocks(device, &num_blocks));
 
-        if (hdr.payload_offset >= count)
+        if (hdr.payload_offset >= num_blocks)
             RAISE(VIC_DEVICE_TOO_SMALL);
     }
 
@@ -1100,7 +1111,7 @@ done:
 }
 
 vic_result_t luks1_recover_master_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* pwd,
     vic_key_t* master_key,
     size_t* master_key_bytes)
@@ -1136,7 +1147,7 @@ done:
 }
 
 vic_result_t luks1_add_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     uint64_t slot_iterations,
     const char* pwd,
     const char* new_pwd)
@@ -1196,7 +1207,7 @@ done:
     return result;
 }
 
-vic_result_t luks1_remove_key(vic_device_t* device, const char* pwd)
+vic_result_t luks1_remove_key(vic_blockdev_t* device, const char* pwd)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr = NULL;
@@ -1235,7 +1246,7 @@ done:
     return result;
 }
 
-vic_result_t luks1_kill_slot(vic_device_t* device, size_t index)
+vic_result_t luks1_kill_slot(vic_blockdev_t* device, size_t index)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr;
@@ -1280,7 +1291,7 @@ done:
 }
 
 vic_result_t luks1_change_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* old_pwd,
     const char* new_pwd)
 {
@@ -1367,7 +1378,7 @@ done:
     return result;
 }
 
-vic_result_t luks1_stat(vic_device_t* device, vic_luks_stat_t* buf)
+vic_result_t luks1_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr = NULL;
@@ -1375,14 +1386,13 @@ vic_result_t luks1_stat(vic_device_t* device, vic_luks_stat_t* buf)
     size_t nbytes;
     size_t offset;
 
-    if (!vic_luks_is_valid_device(device) || !buf)
+    if (!_is_valid_device(device) || !buf)
         RAISE(VIC_BAD_PARAMETER);
 
     if (luks1_read_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
-    if ((nblocks = device->count(device)) == (size_t)-1)
-        RAISE(VIC_DEVICE_COUNT_FAILED);
+    CHECK(vic_blockdev_get_num_blocks(device, &nblocks));
 
     nbytes = nblocks * VIC_SECTOR_SIZE;
     offset = hdr->payload_offset * VIC_SECTOR_SIZE;
@@ -1401,7 +1411,7 @@ done:
 }
 
 vic_result_t luks1_open(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* path,
     const char* name,
     const vic_key_t* master_key,
@@ -1425,16 +1435,15 @@ vic_result_t luks1_open(
 
     /* Determine the size of the payload in sectors */
     {
-        size_t count;
+        size_t num_blocks;
         offset = hdr->payload_offset;
 
-        if ((count = device->count(device)) == (size_t)-1)
-            RAISE(VIC_DEVICE_COUNT_FAILED);
+        CHECK(vic_blockdev_get_num_blocks(device, &num_blocks));
 
-        if (offset >= count)
+        if (offset >= num_blocks)
             RAISE(VIC_DEVICE_TOO_SMALL);
 
-        size = count - offset;
+        size = num_blocks - offset;
     }
 
     /* Format cipher and cipher mode as single string */

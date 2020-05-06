@@ -12,7 +12,7 @@
 
 #define DEFAULT_BLOCK_SIZE 512
 
-#define MAGIC 0x518c05130c1442e4
+#define MAGIC 0x0123456789ABCDEF
 
 typedef struct _blockdev
 {
@@ -130,6 +130,33 @@ done:
     return result;
 }
 
+static vic_result_t _bd_get_num_blocks(
+    const vic_blockdev_t* dev_,
+    size_t* num_blocks)
+{
+    vic_result_t result = VIC_UNEXPECTED;
+    const blockdev_t* dev = (const blockdev_t*)dev_;
+    size_t byte_size;
+    size_t block_size;
+
+    if (!_valid_blockdev(dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
+
+    if (!num_blocks)
+        RAISE(VIC_BAD_PARAMETER);
+
+    CHECK(vic_blockdev_get_byte_size(dev_, &byte_size));
+    CHECK(vic_blockdev_get_block_size(dev_, &block_size));
+
+    *num_blocks = byte_size / block_size;
+
+    result = VIC_OK;
+
+done:
+
+    return result;
+}
+
 static vic_result_t _bd_get(
     vic_blockdev_t* dev_,
     uint64_t blkno,
@@ -205,6 +232,7 @@ static vic_result_t _bd_close(vic_blockdev_t* dev_)
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
     close(dev->fd);
+    memset(dev, 0, sizeof(blockdev_t));
     free(dev);
 
     result = VIC_OK;
@@ -226,10 +254,10 @@ vic_result_t vic_blockdev_open(
     if (block_size == 0)
         block_size = DEFAULT_BLOCK_SIZE;
 
-    if (!path || !_is_power_of_two(block_size) || !dev)
+    if (!path || !_is_power_of_two(block_size) || !dev_out)
         RAISE(VIC_BAD_PARAMETER);
 
-    if (!(dev = calloc(1, sizeof(vic_blockdev_t))))
+    if (!(dev = calloc(1, sizeof(blockdev_t))))
         RAISE(VIC_OUT_OF_MEMORY);
 
     dev->magic = MAGIC;
@@ -244,6 +272,7 @@ vic_result_t vic_blockdev_open(
     dev->base.bd_get = _bd_get;
     dev->base.bd_put = _bd_put;
     dev->base.bd_get_byte_size = _bd_get_byte_size;
+    dev->base.bd_get_num_blocks = _bd_get_num_blocks;
     dev->base.bd_get_block_size = _bd_get_block_size;
     dev->base.bd_set_block_size = _bd_set_block_size;
     dev->base.bd_close = _bd_close;
@@ -281,13 +310,14 @@ vic_result_t vic_blockdev_get_path(
         RAISE(result);
 
     CHECK(dev->bd_get_path(dev, path));
+    result = VIC_OK;
 
 done:
     return result;
 }
 
 vic_result_t vic_blockdev_get_block_size(
-    vic_blockdev_t* dev,
+    const vic_blockdev_t* dev,
     size_t* block_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
@@ -296,6 +326,7 @@ vic_result_t vic_blockdev_get_block_size(
         RAISE(result);
 
     CHECK(dev->bd_get_block_size(dev, block_size));
+    result = VIC_OK;
 
 done:
     return result;
@@ -311,13 +342,14 @@ vic_result_t vic_blockdev_set_block_size(
         RAISE(result);
 
     CHECK(dev->bd_set_block_size(dev, block_size));
+    result = VIC_OK;
 
 done:
     return result;
 }
 
 vic_result_t vic_blockdev_get_byte_size(
-    vic_blockdev_t* dev,
+    const vic_blockdev_t* dev,
     size_t* byte_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
@@ -326,6 +358,23 @@ vic_result_t vic_blockdev_get_byte_size(
         RAISE(result);
 
     CHECK(dev->bd_get_byte_size(dev, byte_size));
+    result = VIC_OK;
+
+done:
+    return result;
+}
+
+vic_result_t vic_blockdev_get_num_blocks(
+    vic_blockdev_t* dev,
+    size_t* num_blocks)
+{
+    vic_result_t result = VIC_UNEXPECTED;
+
+    if (!dev)
+        RAISE(result);
+
+    CHECK(dev->bd_get_num_blocks(dev, num_blocks));
+    result = VIC_OK;
 
 done:
     return result;
@@ -343,6 +392,7 @@ vic_result_t vic_blockdev_get(
         RAISE(result);
 
     CHECK(dev->bd_get(dev, blkno, blocks, nblocks));
+    result = VIC_OK;
 
 done:
     return result;
@@ -360,6 +410,7 @@ vic_result_t vic_blockdev_put(
         RAISE(result);
 
     CHECK(dev->bd_put(dev, blkno, blocks, nblocks));
+    result = VIC_OK;
 
 done:
     return result;
@@ -373,6 +424,7 @@ vic_result_t vic_blockdev_close(vic_blockdev_t* dev)
         RAISE(result);
 
     CHECK(dev->bd_close(dev));
+    result = VIC_OK;
 
 done:
     return result;

@@ -34,17 +34,40 @@ static uint8_t _magic_1st[LUKS_MAGIC_SIZE] = LUKS_MAGIC_1ST;
 
 static uint8_t _magic_2nd[LUKS_MAGIC_SIZE] = LUKS_MAGIC_2ND;
 
-int vic_luks_read_hdr(vic_device_t* device, vic_luks_hdr_t* hdr)
+static bool _is_valid_device(vic_blockdev_t* dev)
+{
+    size_t block_size;
+
+    if (!dev)
+        return false;
+
+    if (vic_blockdev_get_block_size(dev, &block_size) != VIC_OK)
+        return false;
+
+    if (block_size != VIC_SECTOR_SIZE)
+        return false;
+
+    return true;
+}
+
+int vic_luks_read_hdr(vic_blockdev_t* device, vic_luks_hdr_t* hdr)
 {
     int ret = -1;
-    vic_block_t block;
+    uint8_t block[VIC_SECTOR_SIZE];
+    size_t block_size;
+
+    if (vic_blockdev_get_block_size(device, &block_size) != VIC_OK)
+        goto done;
+
+    if (block_size != VIC_SECTOR_SIZE)
+        goto done;
 
     /* Reject null parameters */
-    if (!vic_luks_is_valid_device(device) || !hdr)
+    if (!_is_valid_device(device) || !hdr)
         goto done;;
 
     /* Read one blocks to obtain enough bytes for the header */
-    if (device->get(device, 0, &block, 1) != 0)
+    if (vic_blockdev_get(device, 0, block, 1) != VIC_OK)
         goto done;;
 
     VIC_STATIC_ASSERT(sizeof(vic_luks_hdr_t) <= sizeof(block));
@@ -65,19 +88,14 @@ done:
     return ret;
 }
 
-bool vic_luks_is_valid_device(vic_device_t* device)
-{
-    return device && device->get && device->put && device->count;
-}
-
-vic_result_t vic_luks_dump(vic_device_t* device)
+vic_result_t vic_luks_dump(vic_blockdev_t* device)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
     luks1_hdr_t* hdr1 = NULL;
     luks2_hdr_t* hdr2 = NULL;
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -133,7 +151,7 @@ done:
 }
 
 vic_result_t vic_luks_recover_master_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* pwd,
     vic_key_t* master_key,
     size_t* master_key_bytes)
@@ -141,7 +159,7 @@ vic_result_t vic_luks_recover_master_key(
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -211,7 +229,7 @@ done:
 }
 
 vic_result_t vic_luks_format(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     vic_luks_version_t version,
     const char* cipher,
     const char* keyslot_cipher,
@@ -278,7 +296,7 @@ done:
 }
 
 vic_result_t vic_luks_add_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* keyslot_cipher,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
@@ -288,7 +306,7 @@ vic_result_t vic_luks_add_key(
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -312,12 +330,12 @@ done:
     return result;
 }
 
-vic_result_t vic_luks_remove_key(vic_device_t* device, const char* pwd)
+vic_result_t vic_luks_remove_key(vic_blockdev_t* device, const char* pwd)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -341,14 +359,14 @@ done:
 }
 
 vic_result_t vic_luks_change_key(
-    vic_device_t* device,
+    vic_blockdev_t* device,
     const char* old_pwd,
     const char* new_pwd)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -407,12 +425,12 @@ done:
     return result;
 }
 
-vic_result_t vic_luks_stat(vic_device_t* device, vic_luks_stat_t* buf)
+vic_result_t vic_luks_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -443,12 +461,11 @@ vic_result_t vic_luks_open(
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
-    vic_device_t* device = NULL;
+    vic_blockdev_t* device = NULL;
 
-    if (!(device = vic_open_device(path)))
-        RAISE(VIC_DEVICE_OPEN_FAILED);
+    CHECK(vic_blockdev_open(path, false, 0, &device));
 
-    if (!vic_luks_is_valid_device(device))
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (vic_luks_read_hdr(device, &hdr) != 0)
@@ -470,7 +487,7 @@ vic_result_t vic_luks_open(
 done:
 
     if (device)
-        vic_close_device(device);
+        vic_blockdev_close(device);
 
     return result;
 }
