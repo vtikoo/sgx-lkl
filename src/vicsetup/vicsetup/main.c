@@ -134,7 +134,7 @@ static int luksDump(int argc, const char* argv[])
         exit(1);
     }
 
-    if (__vic_blockdev_open(argv[2], VIC_RDONLY, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(argv[2], VIC_RDONLY, 0, &dev) != VIC_OK)
         err("cannot open %s\n", argv[2]);
 
     if ((r = vic_luks_dump(dev)) != VIC_OK)
@@ -293,7 +293,7 @@ static int luksFormat(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (__vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_format(
@@ -340,7 +340,7 @@ static int luksGetMasterKey(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (__vic_blockdev_open(luksfile, VIC_RDONLY, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, VIC_RDONLY, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_recover_master_key(
@@ -394,7 +394,7 @@ static int luksAddKey(int argc, const char* argv[])
     const char* pwd = argv[3];
     const char* new_pwd = argv[4];
 
-    if (__vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_add_key(dev, keyslot_cipher, slot_iterations,
@@ -428,7 +428,7 @@ static int luksChangeKey(int argc, const char* argv[])
     const char* old_pwd = argv[3];
     const char* new_pwd = argv[4];
 
-    if (__vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_change_key(
@@ -463,7 +463,7 @@ static int luksRemoveKey(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (__vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_remove_key(dev, pwd)) != VIC_OK)
@@ -498,7 +498,7 @@ static int luksOpen(int argc, const char* argv[])
     const char* pwd = argv[3];
     const char* name = argv[4];
 
-    if (__vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_recover_master_key(
@@ -667,10 +667,10 @@ static int verityFormat(int argc, const char* argv[])
             err("bad --salt option");
     }
 
-    if (__vic_blockdev_open(datafile, VIC_RDONLY, blksz, &data_dev) != VIC_OK)
+    if (vic_blockdev_open(datafile, VIC_RDONLY, blksz, &data_dev) != VIC_OK)
         err("cannot open data file: %s\n", datafile);
 
-    if (__vic_blockdev_open(
+    if (vic_blockdev_open(
         hashfile,
         VIC_RDWR | VIC_CREATE | VIC_TRUNC,
         blksz,

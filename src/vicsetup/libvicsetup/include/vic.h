@@ -132,7 +132,7 @@ vic_blockdev_t;
 #define VIC_CREATE 8
 #define VIC_TRUNC  16
 
-vic_result_t __vic_blockdev_open(
+vic_result_t vic_blockdev_open(
     const char* path,
     uint32_t flags,
     size_t block_size, /* defaults to 512 if zero */

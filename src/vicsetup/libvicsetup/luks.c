@@ -463,7 +463,7 @@ vic_result_t vic_luks_open(
     vic_luks_hdr_t hdr;
     vic_blockdev_t* device = NULL;
 
-    CHECK(__vic_blockdev_open(path, VIC_RDWR, VIC_SECTOR_SIZE, &device));
+    CHECK(vic_blockdev_open(path, VIC_RDWR, VIC_SECTOR_SIZE, &device));
 
     if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);

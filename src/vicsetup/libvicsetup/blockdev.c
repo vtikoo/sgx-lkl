@@ -241,7 +241,7 @@ done:
     return result;
 }
 
-vic_result_t __vic_blockdev_open(
+vic_result_t vic_blockdev_open(
     const char* path,
     uint32_t flags,
     size_t block_size,
