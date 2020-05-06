@@ -74,6 +74,7 @@ typedef enum _vic_result
     VIC_BAD_CIPHER,
     VIC_BAD_BLOCK_DEVICE,
     VIC_BAD_BLOCK_SIZE,
+    VIC_BAD_FLAGS,
 }
 vic_result_t;
 
@@ -125,9 +126,15 @@ typedef struct _vic_blockdev
 }
 vic_blockdev_t;
 
-vic_result_t vic_blockdev_open(
+#define VIC_RDONLY 1
+#define VIC_WRONLY 2
+#define VIC_RDWR   4
+#define VIC_CREATE 8
+#define VIC_TRUNC  16
+
+vic_result_t __vic_blockdev_open(
     const char* path,
-    bool readonly,
+    uint32_t flags,
     size_t block_size, /* defaults to 512 if zero */
     vic_blockdev_t** dev);
 
@@ -271,6 +278,32 @@ vic_result_t vic_luks_open(
 
 vic_result_t vic_luks_close(const char* name);
 
+/*
+**==============================================================================
+**
+** verity interface:
+**
+**==============================================================================
+*/
+
 vic_result_t vic_verity_dump(const char* hash_dev);
+
+vic_result_t vic_verity_format(
+    vic_blockdev_t* data_dev,
+    vic_blockdev_t* hash_dev,
+    const char* hash_algorithm,
+    const char* uuid,
+    const uint8_t* salt,
+    size_t salt_size,
+    bool need_superblock,
+    uint8_t* root_hash,
+    size_t* root_hash_size);
+
+vic_result_t vic_verity_open(
+    const char* dm_name,
+    const char* data_dev,
+    const char* hash_dev,
+    const void* root_hash,
+    size_t root_hash_size);
 
 #endif /* _VIC_H */

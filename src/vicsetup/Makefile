@@ -1,3 +1,5 @@
+.PHONY: tests
+
 include defs.mak
 
 all: depend

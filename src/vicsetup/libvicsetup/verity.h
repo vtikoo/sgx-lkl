@@ -65,22 +65,4 @@ VIC_STATIC_ASSERT(VIC_OFFSETOF(vic_verity_sb_t, _pad2) == 344);
 
 void vic_verity_dump_sb(vic_verity_sb_t* sb);
 
-vic_result_t vic_verity_format(
-    const char* datafile,
-    const char* hashfile,
-    const char* hash_algorithm,
-    const char* uuid,
-    const uint8_t* salt,
-    size_t salt_size,
-    bool need_superblock,
-    uint8_t* root_hash,
-    size_t* root_hash_size);
-
-vic_result_t vic_verity_open(
-    const char* dm_name,
-    const char* data_dev,
-    const char* hash_dev,
-    const void* root_hash,
-    size_t root_hash_size);
-
 #endif /* _VIC_VERITY_H */

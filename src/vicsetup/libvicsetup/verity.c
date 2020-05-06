@@ -6,7 +6,9 @@
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <linux/fs.h>
+#include <assert.h>
 
 #include "vic.h"
 #include "uuid.h"
@@ -16,6 +18,8 @@
 #include "crypto.h"
 #include "round.h"
 #include "dm.h"
+
+#define VERITY_BLOCK_SIZE 4096
 
 static vic_result_t _get_file_size(const char* path, size_t* size_out)
 {
@@ -76,9 +80,25 @@ void vic_verity_dump_sb(vic_verity_sb_t* sb)
     }
 }
 
+static bool _is_valid_device(vic_blockdev_t* dev)
+{
+    size_t block_size;
+
+    if (!dev)
+        return false;
+
+    if (vic_blockdev_get_block_size(dev, &block_size) != VIC_OK)
+        return false;
+
+    if (block_size != VERITY_BLOCK_SIZE)
+        return false;
+
+    return true;
+}
+
 vic_result_t vic_verity_format(
-    const char* datafile,
-    const char* hashfile,
+    vic_blockdev_t* data_dev,
+    vic_blockdev_t* hash_dev,
     const char* hash_algorithm,
     const char* uuid,
     const uint8_t* salt,
@@ -88,9 +108,7 @@ vic_result_t vic_verity_format(
     size_t* root_hash_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    FILE* is = NULL;
-    FILE* os = NULL;
-    const size_t blk_sz = 4096;
+    const size_t blk_sz = VERITY_BLOCK_SIZE;
     size_t nblks;
     size_t digests_per_blk;
     size_t hsize;
@@ -104,8 +122,14 @@ vic_result_t vic_verity_format(
     const size_t MIN_DATA_FILE_SIZE = blk_sz * 2;
     uint8_t last_node[blk_sz];
 
-    if (!datafile || !hashfile || !root_hash || !root_hash_size)
+    if (!data_dev || !hash_dev || !root_hash || !root_hash_size)
         RAISE(VIC_BAD_PARAMETER);
+
+    if (!_is_valid_device(data_dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
+
+    if (!_is_valid_device(hash_dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
 
     if (salt)
     {
@@ -161,7 +185,7 @@ vic_result_t vic_verity_format(
     {
         size_t size;
 
-        CHECK(_get_file_size(datafile, &size));
+        CHECK(vic_blockdev_get_byte_size(data_dev, &size));
 
         /* File must be a multiple of the block size */
         if (size % blk_sz)
@@ -194,14 +218,6 @@ vic_result_t vic_verity_format(
     for (size_t i = 0; i < levels; i++)
         total_nodes += nnodes[i];
 
-    /* Open the data file for read */
-    if (!(is = fopen(datafile, "rb")))
-        RAISE(VIC_OPEN_FAILED);
-
-    /* Open the hash file for read and write */
-    if (!(os = fopen(hashfile, "w+")))
-        RAISE(VIC_OPEN_FAILED);
-
     /* Fill the hash file with zero blocks */
     {
         uint8_t zeros[blk_sz];
@@ -213,10 +229,7 @@ vic_result_t vic_verity_format(
         memset(zeros, 0, sizeof(zeros));
 
         for (size_t i = 0; i < nblks; i++)
-        {
-            if (fwrite(zeros, 1, sizeof(zeros), os) != sizeof(zeros))
-                RAISE(VIC_WRITE_FAILED);
-        }
+            CHECK(vic_blockdev_put(hash_dev, i, zeros, 1));
     }
 
     /* Write the leaf nodes */
@@ -225,6 +238,9 @@ vic_result_t vic_verity_format(
         uint8_t node[blk_sz];
         size_t node_offset = 0;
         size_t offset;
+        size_t nblocks;
+
+        CHECK(vic_blockdev_get_num_blocks(data_dev, &nblocks));
 
         /* Calculate the hash file offset to the first leaf node block */
         offset = (total_nodes - nleaves) * blk_sz;
@@ -235,9 +251,13 @@ vic_result_t vic_verity_format(
         /* Zero out the node */
         memset(node, 0, sizeof(node));
 
-        while (fread(blk, 1, sizeof(blk), is) == blk_sz)
+        /* For each block in the file */
+        for (size_t i = 0; i < nblocks; i++)
         {
             vic_hash_t h;
+
+            /* Read the next block */
+            CHECK(vic_blockdev_get(data_dev, i, blk, 1));
 
             /* Compute the hash of the current block */
             if (vic_hash2(htype, salt, salt_size, &blk, blk_sz, &h) != 0)
@@ -246,14 +266,10 @@ vic_result_t vic_verity_format(
             /* Write out the node if full */
             if (node_offset + hsize > blk_sz)
             {
-                if (fseek(os, offset, SEEK_SET) != 0)
-                    RAISE(VIC_SEEK_FAILED);
-
-                if (fwrite(node, 1, sizeof(node), os) != sizeof(node))
-                    RAISE(VIC_WRITE_FAILED);
-
+                assert((offset % blk_sz) == 0);
+                const size_t blkno = offset / blk_sz;
+                CHECK(vic_blockdev_put(hash_dev, blkno, node, 1));
                 memcpy(last_node, node, sizeof(last_node));
-
                 offset += sizeof(node);
                 memset(node, 0, sizeof(node));
                 node_offset = 0;
@@ -266,12 +282,9 @@ vic_result_t vic_verity_format(
         /* Write the final hash file block if any */
         if (node_offset > 0)
         {
-            if (fseek(os, offset, SEEK_SET) != 0)
-                RAISE(VIC_SEEK_FAILED);
-
-            if (fwrite(node, 1, sizeof(node), os) != sizeof(node))
-                RAISE(VIC_WRITE_FAILED);
-
+            assert((offset % blk_sz) == 0);
+            const size_t blkno = offset / blk_sz;
+            CHECK(vic_blockdev_put(hash_dev, blkno, node, 1));
             memcpy(last_node, node, sizeof(last_node));
         }
     }
@@ -318,12 +331,9 @@ vic_result_t vic_verity_format(
 
                 /* Read the next block */
                 {
-                    if (fseek(os, read_offset, SEEK_SET) != 0)
-                        RAISE(VIC_SEEK_FAILED);
-
-                    if (fread(blk, 1, blk_sz, os) != blk_sz)
-                        RAISE(VIC_READ_FAILED);
-
+                    assert((read_offset % blk_sz) == 0);
+                    const size_t blkno = read_offset / blk_sz;
+                    CHECK(vic_blockdev_get(hash_dev, blkno, blk, 1));
                     read_offset += blk_sz;
                 }
 
@@ -340,14 +350,11 @@ vic_result_t vic_verity_format(
 
             /* Write out this interior node */
             {
-                if (fseek(os, write_offset, SEEK_SET) != 0)
-                    RAISE(VIC_SEEK_FAILED);
-
-                if (fwrite(node, 1, blk_sz, os) != blk_sz)
-                    RAISE(VIC_WRITE_FAILED);
-
+                assert((write_offset % blk_sz) == 0);
+                const size_t blkno = write_offset / blk_sz;
+                /* ATTN: this writes the wrong data here */
+                CHECK(vic_blockdev_put(hash_dev, blkno, node, 1));
                 memcpy(last_node, node, sizeof(last_node));
-
                 write_offset += blk_sz;
             }
         }
@@ -389,11 +396,11 @@ vic_result_t vic_verity_format(
 
         if (need_superblock)
         {
-            if (fseek(os, 0, SEEK_SET) != 0)
-                RAISE(VIC_SEEK_FAILED);
+            uint8_t blk[blk_sz];
 
-            if (fwrite(&sb, 1, sizeof(sb), os) != sizeof(sb))
-                RAISE(VIC_WRITE_FAILED);
+            memset(blk, 0, sizeof(blk));
+            memcpy(blk, &sb, sizeof(vic_verity_sb_t));
+            CHECK(vic_blockdev_put(hash_dev, 0, blk, 1));
         }
 
 #if 0
@@ -403,12 +410,6 @@ vic_result_t vic_verity_format(
         printf("\n");
 #endif
     }
-
-    if (is)
-        fclose(is);
-
-    if (os)
-        fclose(os);
 
     result = VIC_OK;
 
@@ -520,7 +521,7 @@ vic_result_t vic_verity_dump(const char* hash_dev)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_verity_sb_t sb;
-    uint8_t hash_block[4096];
+    uint8_t hash_block[VERITY_BLOCK_SIZE];
 
     if (!hash_dev)
         RAISE(VIC_BAD_PARAMETER);

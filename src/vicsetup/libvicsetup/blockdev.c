@@ -241,15 +241,52 @@ done:
     return result;
 }
 
-vic_result_t vic_blockdev_open(
+vic_result_t __vic_blockdev_open(
     const char* path,
-    bool readonly,
+    uint32_t flags,
     size_t block_size,
     vic_blockdev_t** dev_out)
 {
     vic_result_t result = VIC_UNEXPECTED;
     blockdev_t* dev = NULL;
-    int flags = readonly ? O_RDONLY : O_RDWR;
+    int open_flags = 0;
+    int mode = 0;
+
+    /* Resolve the open() flags and mode */
+    {
+        if (flags & VIC_RDWR)
+        {
+            if ((flags & VIC_RDONLY) || ((flags & VIC_WRONLY)))
+                RAISE(VIC_BAD_FLAGS);
+
+            open_flags |= O_RDWR;
+        }
+
+        if (flags & VIC_RDONLY)
+        {
+            if ((flags & VIC_RDWR) || ((flags & VIC_WRONLY)))
+                RAISE(VIC_BAD_FLAGS);
+
+            open_flags |= O_RDONLY;
+        }
+
+        if (flags & VIC_WRONLY)
+        {
+            if ((flags & VIC_RDWR) || ((flags & VIC_RDONLY)))
+                RAISE(VIC_BAD_FLAGS);
+
+            open_flags |= O_WRONLY;
+        }
+
+        if (flags & VIC_CREATE)
+        {
+            open_flags |= O_CREAT;
+            mode = 0600;
+        }
+
+        if (flags & VIC_TRUNC)
+            open_flags |= O_TRUNC;
+    }
 
     if (block_size == 0)
         block_size = DEFAULT_BLOCK_SIZE;
@@ -265,7 +302,7 @@ vic_result_t vic_blockdev_open(
     if (vic_strlcpy(dev->path, path, PATH_MAX) >= PATH_MAX)
         RAISE(VIC_UNEXPECTED);
 
-    if ((dev->fd = open(path, flags)) < 0)
+    if ((dev->fd = open(path, open_flags, mode)) < 0)
         RAISE(VIC_OPEN_FAILED);
 
     dev->base.bd_get_path = _bd_get_path;
