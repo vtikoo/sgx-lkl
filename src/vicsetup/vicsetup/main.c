@@ -118,6 +118,7 @@ static int luksDump(int argc, const char* argv[])
     vic_blockdev_t* dev;
     vic_result_t r;
     bool dump_payload = false;
+    const int data_flags = VIC_RDONLY;
 
     /* Get --dump-payload option */
     if (get_opt(&argc, argv, "--dump-payload", NULL) == 0)
@@ -134,7 +135,7 @@ static int luksDump(int argc, const char* argv[])
         exit(1);
     }
 
-    if (vic_blockdev_open(argv[2], VIC_RDONLY, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(argv[2], data_flags, 0, &dev) != VIC_OK)
         err("cannot open %s\n", argv[2]);
 
     if ((r = vic_luks_dump(dev)) != VIC_OK)
@@ -325,6 +326,7 @@ static int luksGetMasterKey(int argc, const char* argv[])
     vic_result_t r;
     vic_key_t key;
     size_t key_size;
+    const int data_flags = VIC_RDONLY;
 
     /* Check usage */
     if (argc != 4)
@@ -340,7 +342,7 @@ static int luksGetMasterKey(int argc, const char* argv[])
     const char* luksfile = argv[2];
     const char* pwd = argv[3];
 
-    if (vic_blockdev_open(luksfile, VIC_RDONLY, 0, &dev) != VIC_OK)
+    if (vic_blockdev_open(luksfile, data_flags, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_recover_master_key(
@@ -586,6 +588,8 @@ static int _hexstr_to_salt(const char* hexstr, uint8_t buf[32])
 static int verityDump(int argc, const char* argv[])
 {
     vic_result_t r;
+    vic_blockdev_t* hash_dev;
+    const size_t blksz = 4096;
 
     /* Check usage */
     if (argc != 3)
@@ -599,9 +603,15 @@ static int verityDump(int argc, const char* argv[])
     }
 
     const char* hashfile = argv[2];
+    const int hash_flags = VIC_RDONLY;
 
-    if ((r = vic_verity_dump(hashfile)) != VIC_OK)
+    if (vic_blockdev_open(hashfile, hash_flags, blksz, &hash_dev) != VIC_OK)
+        err("cannot open hash file: %s\n", hashfile);
+
+    if ((r = vic_verity_dump(hash_dev)) != VIC_OK)
         err("verityDump: failed: r=%u: %s\n", r, vic_result_string(r));
+
+    vic_blockdev_close(hash_dev);
 
     return 0;
 }
@@ -654,6 +664,8 @@ static int verityFormat(int argc, const char* argv[])
     const char* datafile = argv[2];
     const char* hashfile = argv[3];
     const size_t blksz = 4096;
+    const int data_flags = VIC_RDONLY;
+    const int hash_flags = VIC_RDWR | VIC_CREATE | VIC_TRUNC;
 
     if (salt_opt)
     {
@@ -667,17 +679,11 @@ static int verityFormat(int argc, const char* argv[])
             err("bad --salt option");
     }
 
-    if (vic_blockdev_open(datafile, VIC_RDONLY, blksz, &data_dev) != VIC_OK)
+    if (vic_blockdev_open(datafile, data_flags, blksz, &data_dev) != VIC_OK)
         err("cannot open data file: %s\n", datafile);
 
-    if (vic_blockdev_open(
-        hashfile,
-        VIC_RDWR | VIC_CREATE | VIC_TRUNC,
-        blksz,
-        &hash_dev) != VIC_OK)
-    {
+    if (vic_blockdev_open(hashfile, hash_flags, blksz, &hash_dev) != VIC_OK)
         err("cannot open hash file: %s\n", hashfile);
-    }
 
     if ((r = vic_verity_format(
         data_dev,
@@ -706,6 +712,7 @@ static int verityFormat(int argc, const char* argv[])
 static int verityOpen(int argc, const char* argv[])
 {
     vic_result_t r;
+    const size_t blksz = 4096;
 
     /* Check usage */
     if (argc != 6)
@@ -718,25 +725,38 @@ static int verityOpen(int argc, const char* argv[])
         exit(1);
     }
 
-    const char* data_device_opt = argv[2];
+    const char* datafile = argv[2];
     const char* name_opt = argv[3];
-    const char* hash_device_opt = argv[4];
+    const char* hashfile = argv[4];
     const char* root_hash_opt = argv[5];
     uint8_t* root_hash;
     size_t root_hash_size;
+    vic_blockdev_t* data_dev;
+    vic_blockdev_t* hash_dev;
+    const int data_flags = VIC_RDONLY;
+    const int hash_flags = VIC_RDONLY;
 
     if (vic_ascii_to_bin(root_hash_opt, &root_hash, &root_hash_size) != VIC_OK)
         err("bad root-hash argument");
 
+    if (vic_blockdev_open(datafile, data_flags, blksz, &data_dev) != VIC_OK)
+        err("cannot open data file: %s\n", datafile);
+
+    if (vic_blockdev_open(hashfile, hash_flags, blksz, &hash_dev) != VIC_OK)
+        err("cannot open hash file: %s\n", hashfile);
+
     if ((r = vic_verity_open(
         name_opt,
-        data_device_opt,
-        hash_device_opt,
+        data_dev,
+        hash_dev,
         root_hash,
         root_hash_size)) != VIC_OK)
     {
         err("vic_verity_open() failed: %u: %s\n", r, vic_result_string(r));
     }
+
+    vic_blockdev_close(data_dev);
+    vic_blockdev_close(hash_dev);
 
     return 0;
 }

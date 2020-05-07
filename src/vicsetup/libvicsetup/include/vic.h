@@ -286,7 +286,7 @@ vic_result_t vic_luks_close(const char* name);
 **==============================================================================
 */
 
-vic_result_t vic_verity_dump(const char* hash_dev);
+vic_result_t vic_verity_dump(vic_blockdev_t* hash_dev);
 
 vic_result_t vic_verity_format(
     vic_blockdev_t* data_dev,
@@ -301,8 +301,8 @@ vic_result_t vic_verity_format(
 
 vic_result_t vic_verity_open(
     const char* dm_name,
-    const char* data_dev,
-    const char* hash_dev,
+    vic_blockdev_t* data_dev,
+    vic_blockdev_t* hash_dev,
     const void* root_hash,
     size_t root_hash_size);
 

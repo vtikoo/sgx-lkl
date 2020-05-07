@@ -21,45 +21,6 @@
 
 #define VERITY_BLOCK_SIZE 4096
 
-static vic_result_t _get_file_size(const char* path, size_t* size_out)
-{
-    vic_result_t result = VIC_UNEXPECTED;
-    struct stat st;
-    size_t size;
-    int fd = -1;
-
-    if (size_out)
-        *size_out = 0;
-
-    if (!path || !size_out)
-        RAISE(VIC_BAD_PARAMETER);
-
-    if ((fd = open(path, O_RDONLY)) < 0)
-        RAISE(VIC_OPEN_FAILED);
-
-    if (fstat(fd, &st) != 0)
-        RAISE(VIC_STAT_FAILED);
-
-    if (S_ISREG(st.st_mode))
-    {
-        size = st.st_size;
-    }
-    else if (ioctl(fd, BLKGETSIZE64, &size) != 0)
-    {
-        RAISE(VIC_IOCTL_FAILED);
-    }
-
-    *size_out = size;
-    result = VIC_OK;
-
-done:
-
-    if (fd >= 0)
-        close(fd);
-
-    return result;
-}
-
 void vic_verity_dump_sb(vic_verity_sb_t* sb)
 {
     if (sb)
@@ -417,19 +378,19 @@ done:
     return result;
 }
 
-static vic_result_t _load_super_block(const char* path, vic_verity_sb_t* sb)
+static vic_result_t _load_super_block(
+    vic_blockdev_t* dev,
+    vic_verity_sb_t* sb)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    FILE* is = NULL;
+    char block[VERITY_BLOCK_SIZE];
 
-    if (!path || !sb)
+    if (!dev || !sb)
         RAISE(VIC_BAD_PARAMETER);
 
-    if (!(is = fopen(path, "rb")))
-        RAISE(VIC_OPEN_FAILED);
+    CHECK(vic_blockdev_get(dev, 0, block, 1));
 
-    if (fread(sb, 1, sizeof(vic_verity_sb_t), is) != sizeof(vic_verity_sb_t))
-        RAISE(VIC_READ_FAILED);
+    memcpy(sb, block, sizeof(vic_verity_sb_t));
 
     if (memcmp(sb->signature, "verity\0\0", 8) != 0)
         RAISE(VIC_BAD_SIGNATURE);
@@ -438,16 +399,13 @@ static vic_result_t _load_super_block(const char* path, vic_verity_sb_t* sb)
 
 done:
 
-    if (!is)
-        fclose(is);
-
     return result;
 }
 
 vic_result_t vic_verity_open(
     const char* dm_name,
-    const char* data_dev,
-    const char* hash_dev,
+    vic_blockdev_t* data_dev,
+    vic_blockdev_t* hash_dev,
     const void* root_hash,
     size_t root_hash_size)
 {
@@ -455,20 +413,25 @@ vic_result_t vic_verity_open(
     size_t data_dev_size;
     vic_verity_sb_t sb;
     size_t num_blocks;
+    char data_dev_path[PATH_MAX];
+    char hash_dev_path[PATH_MAX];
 
     if (!dm_name || !data_dev || !hash_dev || !root_hash || !root_hash_size)
         RAISE(VIC_BAD_PARAMETER);
 
-    CHECK(_get_file_size(data_dev, &data_dev_size));
+    CHECK(vic_blockdev_get_byte_size(data_dev, &data_dev_size));
 
     CHECK(_load_super_block(hash_dev, &sb));
 
     num_blocks = data_dev_size / sb.data_block_size;
 
+    CHECK(vic_blockdev_get_path(data_dev, data_dev_path));
+    CHECK(vic_blockdev_get_path(hash_dev, hash_dev_path));
+
     CHECK(vic_dm_create_verity(
         dm_name,
-        data_dev,
-        hash_dev,
+        data_dev_path,
+        hash_dev_path,
         sb.data_block_size,
         sb.hash_block_size,
         num_blocks,
@@ -487,37 +450,7 @@ done:
     return result;
 }
 
-static vic_result_t _load_root_hash_block(
-    const char* path,
-    uint8_t* hash_block,
-    size_t hash_block_size)
-{
-    vic_result_t result = VIC_UNEXPECTED;
-    FILE* is = NULL;
-
-    if (!path)
-        RAISE(VIC_BAD_PARAMETER);
-
-    if (!(is = fopen(path, "rb")))
-        RAISE(VIC_OPEN_FAILED);
-
-    if (fseek(is, hash_block_size, SEEK_SET) != 0)
-        RAISE(VIC_SEEK_FAILED);
-
-    if (fread(hash_block, 1, hash_block_size, is) != hash_block_size)
-        RAISE(VIC_READ_FAILED);
-
-    result = VIC_OK;
-
-done:
-
-    if (!is)
-        fclose(is);
-
-    return result;
-}
-
-vic_result_t vic_verity_dump(const char* hash_dev)
+vic_result_t vic_verity_dump(vic_blockdev_t* hash_dev)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_verity_sb_t sb;
@@ -533,7 +466,7 @@ vic_result_t vic_verity_dump(const char* hash_dev)
     if (sb.hash_block_size > sizeof(hash_block))
         RAISE(VIC_UNEXPECTED);
 
-    CHECK(_load_root_hash_block(hash_dev, hash_block, sb.hash_block_size));
+    CHECK(vic_blockdev_get(hash_dev, 1, hash_block, 1));
 
     /* Print the root hash */
     {
