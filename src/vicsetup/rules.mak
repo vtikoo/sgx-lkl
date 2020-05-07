@@ -16,8 +16,6 @@ endif
 clean:
 	rm -f $(OBJECTS) $(PROGRAM) $(ARCHIVE) $(CLEAN) depend.mak
 
-depend.mak: depend
-
 depend:
 	@ rm -f depend.mak
 	@ $(foreach i, $(SOURCES), gcc -M -MG $(DEFINES) $(INCLUDES) $(i) -MT $(i:.c=.o) >> depend.mak $(NL) )
