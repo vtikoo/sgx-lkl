@@ -388,6 +388,9 @@ static vic_result_t _load_super_block(
     if (!dev || !sb)
         RAISE(VIC_BAD_PARAMETER);
 
+    if (!_is_valid_device(dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
+
     CHECK(vic_blockdev_get(dev, 0, block, 1));
 
     memcpy(sb, block, sizeof(vic_verity_sb_t));
@@ -418,6 +421,12 @@ vic_result_t vic_verity_open(
 
     if (!dm_name || !data_dev || !hash_dev || !root_hash || !root_hash_size)
         RAISE(VIC_BAD_PARAMETER);
+
+    if (!_is_valid_device(data_dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
+
+    if (!_is_valid_device(hash_dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
 
     CHECK(vic_blockdev_get_byte_size(data_dev, &data_dev_size));
 
@@ -458,6 +467,9 @@ vic_result_t vic_verity_dump(vic_blockdev_t* hash_dev)
 
     if (!hash_dev)
         RAISE(VIC_BAD_PARAMETER);
+
+    if (!_is_valid_device(hash_dev))
+        RAISE(VIC_BAD_BLOCK_DEVICE);
 
     CHECK(_load_super_block(hash_dev, &sb));
 
