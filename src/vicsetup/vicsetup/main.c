@@ -718,7 +718,7 @@ static int verityOpen(int argc, const char* argv[])
     if (argc != 6)
     {
         fprintf(stderr,
-            "Usage: %s %s <data_device> <name> <hash_device> <root_hash>\n"
+            "Usage: %s %s <datafile> <name> <hashfile> <root_hash>\n"
             "\n",
             argv[0],
             argv[1]);
