@@ -89,7 +89,6 @@ vic_result_t luks1_format(
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
-    uint64_t slot_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes);
 

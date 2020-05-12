@@ -125,7 +125,6 @@ int crypt_format(
             uuid,
             p ? p->hash : NULL,
             0, /* mk_iterations */
-            0, /* slot_iterations */
             (const vic_key_t*)volume_key,
             volume_key_size)) != VIC_OK) /* pwd */
         {
@@ -200,7 +199,6 @@ int crypt_format(
             uuid,
             hash,
             iterations,
-            0, /* slot_iterations */
             0, /* pbkdf_memory */
             (const vic_key_t*)volume_key,
             volume_key_size,

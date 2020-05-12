@@ -318,7 +318,6 @@ static int luksFormat(int argc, const char* argv[])
         uuid,
         hash,
         mk_iterations,
-        slot_iterations,
         pbkdf_memory,
         key,
         key_size,
@@ -330,8 +329,8 @@ static int luksFormat(int argc, const char* argv[])
     if ((r = vic_luks_add_key_by_master_key(
         dev,
         keyslot_cipher,
-        0, /* slot_iterations */
-        0, /* pbkdf_memory */
+        slot_iterations,
+        pbkdf_memory,
         key,
         key_size,
         pwd)) != VIC_OK)
