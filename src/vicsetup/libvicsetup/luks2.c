@@ -3121,7 +3121,6 @@ vic_result_t luks2_format(
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
-    uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     vic_integrity_t integrity)
@@ -3175,9 +3174,6 @@ vic_result_t luks2_format(
     if (mk_iterations < LUKS_MIN_MK_ITERATIONS)
         mk_iterations = LUKS_MIN_MK_ITERATIONS;
 
-    if (pbkdf_memory == 0)
-        pbkdf_memory = DEFAULT_PBKDF_MEMORY;
-
     /* Get the number of sectors in the device */
     CHECK(vic_blockdev_get_num_blocks(device, &num_device_blocks));
 
@@ -3194,7 +3190,7 @@ vic_result_t luks2_format(
         label,
         uuid,
         hash,
-        pbkdf_memory, /* ATTN: this is the mk_iterations parameter! */
+        mk_iterations,
         subsystem,
         integrity));
 

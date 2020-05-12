@@ -198,7 +198,6 @@ int crypt_format(
             uuid,
             hash,
             iterations,
-            0, /* pbkdf_memory */
             (const vic_key_t*)volume_key,
             volume_key_size,
             VIC_INTEGRITY_NONE)) != VIC_OK)

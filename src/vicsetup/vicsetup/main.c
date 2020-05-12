@@ -317,7 +317,6 @@ static int luksFormat(int argc, const char* argv[])
         uuid,
         hash,
         mk_iterations,
-        pbkdf_memory,
         key,
         key_size,
         integrity)) != VIC_OK)

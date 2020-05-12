@@ -235,7 +235,6 @@ vic_result_t vic_luks_format(
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
-    uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     uint32_t flags)
@@ -270,7 +269,6 @@ vic_result_t vic_luks_format(
             uuid,
             hash,
             mk_iterations,
-            pbkdf_memory,
             master_key,
             master_key_bytes,
             flags));
