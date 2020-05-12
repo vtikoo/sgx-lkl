@@ -146,8 +146,7 @@ int crypt_format(
 
         if (p)
         {
-            /* ATTN: support label */
-            /* ATTN: support subsystem */
+            /* ATTN: sector_size not supported */
             if (p->integrity_params ||
                 p->data_alignment ||
                 p->data_device ||
