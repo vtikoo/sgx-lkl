@@ -195,7 +195,6 @@ int crypt_format(
         if ((r = luks2_format(
             cd->vbd,
             cipher,
-            cipher, /* keyslot cipher */
             uuid,
             hash,
             iterations,

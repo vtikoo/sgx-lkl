@@ -180,7 +180,6 @@ vic_result_t luks2_recover_master_key(
 vic_result_t luks2_format(
     vic_blockdev_t* device,
     const char* cipher,
-    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,

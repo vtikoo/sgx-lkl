@@ -3118,7 +3118,6 @@ done:
 vic_result_t luks2_format(
     vic_blockdev_t* device,
     const char* cipher,
-    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
@@ -3172,9 +3171,6 @@ vic_result_t luks2_format(
 
     if (!cipher)
         cipher = LUKS_DEFAULT_CIPHER;
-
-    if (!keyslot_cipher)
-        keyslot_cipher = LUKS_DEFAULT_CIPHER;
 
     if (mk_iterations < LUKS_MIN_MK_ITERATIONS)
         mk_iterations = LUKS_MIN_MK_ITERATIONS;

@@ -314,7 +314,6 @@ static int luksFormat(int argc, const char* argv[])
         dev,
         version,
         cipher,
-        keyslot_cipher,
         uuid,
         hash,
         mk_iterations,

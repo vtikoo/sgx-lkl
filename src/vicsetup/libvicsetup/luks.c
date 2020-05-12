@@ -232,7 +232,6 @@ vic_result_t vic_luks_format(
     vic_blockdev_t* device,
     vic_luks_version_t version,
     const char* cipher,
-    const char* keyslot_cipher,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
@@ -268,7 +267,6 @@ vic_result_t vic_luks_format(
         CHECK(luks2_format(
             device,
             cipher,
-            keyslot_cipher,
             uuid,
             hash,
             mk_iterations,
