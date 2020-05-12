@@ -3202,7 +3202,7 @@ vic_result_t luks2_format(
         label,
         uuid,
         hash,
-        pbkdf_memory,
+        pbkdf_memory, /* ATTN: this is the mk_iterations parameter! */
         subsystem,
         integrity));
 

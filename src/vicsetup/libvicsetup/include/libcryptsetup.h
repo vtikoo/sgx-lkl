@@ -55,9 +55,9 @@ struct crypt_device;
 
 struct crypt_params_luks1
 {
-    const char *hash;
+    const char* hash;
     size_t data_alignment;
-    const char *data_device;
+    const char* data_device;
 };
 
 struct crypt_pbkdf_type

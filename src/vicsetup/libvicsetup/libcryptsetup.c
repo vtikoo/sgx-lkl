@@ -4,8 +4,11 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "luks1.h"
+#include "luks2.h"
+#include "integrity.h"
 
 struct crypt_device
 {
@@ -78,7 +81,7 @@ static bool _valid_key_size(size_t key_size)
 int crypt_format(
     struct crypt_device* cd,
     const char* type,
-    const char* cipher,
+    const char* cipher_name,
     const char* cipher_mode,
     const char* uuid,
     const char* volume_key,
@@ -87,7 +90,7 @@ int crypt_format(
 {
     int ret = 0;
 
-    if (!cd || !cipher || !cipher_mode)
+    if (!cd || !cipher_name || !cipher_mode)
     {
         ret = -EINVAL;
         goto done;
@@ -99,6 +102,7 @@ int crypt_format(
         goto done;
     }
 
+    /* Type defaults to LUKS version 1 */
     if (!type)
         type = CRYPT_LUKS1;
 
@@ -116,7 +120,7 @@ int crypt_format(
 
         if ((r = luks1_format(
             cd->vbd,
-            cipher,
+            cipher_name,
             cipher_mode,
             uuid,
             p ? p->hash : NULL,
@@ -129,9 +133,86 @@ int crypt_format(
             goto done;
         }
     }
+    else if (strcmp(type, CRYPT_LUKS2) == 0)
+    {
+        char cipher[128];
+        const struct crypt_params_luks2* p = params;
+        const char* hash = NULL;
+        uint64_t iterations = 0;
+        vic_integrity_t integrity = VIC_INTEGRITY_NONE;
+        vic_result_t r;
+        int n;
+
+        if (p)
+        {
+            /* ATTN: support label */
+            /* ATTN: support subsystem */
+            if (p->integrity_params ||
+                p->data_alignment ||
+                p->data_device ||
+                p->sector_size ||
+                p->label ||
+                p->subsystem)
+            {
+                ret = -ENOTSUP;
+                goto done;
+            }
+
+            if (p->integrity)
+            {
+                if ((integrity = vic_integrity_enum(
+                    p->integrity)) == VIC_INTEGRITY_NONE)
+                {
+                    ret = -EINVAL;
+                    goto done;
+                }
+            }
+
+            if (p->pbkdf)
+            {
+                hash = p->pbkdf->hash;
+                iterations = p->pbkdf->iterations;
+
+                /* ATTN: support type */
+                if (p->pbkdf->time_ms ||
+                    p->pbkdf->max_memory_kb ||
+                    p->pbkdf->parallel_threads ||
+                    p->pbkdf->flags)
+                {
+                    ret = -ENOTSUP;
+                    goto done;
+                }
+            }
+        }
+
+        n = snprintf(cipher, sizeof(cipher), "%s-%s", cipher_name, cipher_mode);
+
+        if (n <= 0 || n >= (int)sizeof(cipher))
+        {
+            ret = -EINVAL;
+            goto done;
+        }
+
+        if ((r = luks2_format(
+            cd->vbd,
+            cipher,
+            cipher, /* keyslot cipher */
+            uuid,
+            hash,
+            iterations,
+            0, /* slot_iterations */
+            0, /* pbkdf_memory */
+            (const vic_key_t*)volume_key,
+            volume_key_size,
+            VIC_INTEGRITY_NONE)) != VIC_OK)
+        {
+            ret = -ENOSYS;
+            goto done;
+        }
+    }
     else
     {
-        (void)params;
+        /* ATTN: */
     }
 
 done:
