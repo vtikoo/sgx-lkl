@@ -137,6 +137,8 @@ int crypt_format(
         char cipher[128];
         const struct crypt_params_luks2* p = params;
         const char* hash = NULL;
+        const char* label = NULL;
+        const char* subsystem = NULL;
         uint64_t iterations = 0;
         vic_integrity_t integrity = VIC_INTEGRITY_NONE;
         vic_result_t r;
@@ -149,13 +151,14 @@ int crypt_format(
             if (p->integrity_params ||
                 p->data_alignment ||
                 p->data_device ||
-                p->sector_size ||
-                p->label ||
-                p->subsystem)
+                p->sector_size)
             {
                 ret = -ENOTSUP;
                 goto done;
             }
+
+            label = p->label;
+            subsystem = p->subsystem;
 
             if (p->integrity)
             {
@@ -194,6 +197,8 @@ int crypt_format(
 
         if ((r = luks2_format(
             cd->vbd,
+            label,
+            subsystem,
             cipher,
             uuid,
             hash,

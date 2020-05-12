@@ -179,6 +179,8 @@ vic_result_t luks2_recover_master_key(
 
 vic_result_t luks2_format(
     vic_blockdev_t* device,
+    const char* label,
+    const char* subsystem,
     const char* cipher,
     const char* uuid,
     const char* hash,

@@ -2542,14 +2542,14 @@ done:
 
 static vic_result_t _initialize_hdr(
     luks2_ext_hdr_t** ext_out,
+    const char* label,
+    const char* subsystem,
     const vic_key_t* key,
     size_t key_size,
     const char* cipher,
-    const char* label,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
-    const char* subsystem,
     vic_integrity_t integrity)
 {
     vic_result_t result = VIC_UNEXPECTED;
@@ -2580,6 +2580,14 @@ static vic_result_t _initialize_hdr(
             ._padding4096 = { 0 },
         };
 
+        /* hdr.label */
+        if (label)
+            vic_strlcpy(hdr.label, label, sizeof(hdr.label));
+
+        /* hdr.subsystem */
+        if (subsystem)
+            vic_strlcpy(hdr.subsystem, subsystem, sizeof(hdr.subsystem));
+
         if (!(p = calloc(1, sizeof(luks2_ext_hdr_t) + json_size)))
             RAISE(VIC_OUT_OF_MEMORY);
 
@@ -2588,22 +2596,11 @@ static vic_result_t _initialize_hdr(
         /* hdr.hdr_size */
         p->phdr.hdr_size = hdr_size;
 
-        /* hdr.label */
-        if (label)
-            vic_strlcpy(p->phdr.label, label, sizeof(p->phdr.label));
-
         /* hdr.salt */
         vic_luks_random(p->phdr.salt, sizeof(p->phdr.salt));
 
         /* hdr.uuid */
         strcpy(p->phdr.uuid, uuid);
-
-        /* hdr.subsystem */
-        if (subsystem)
-        {
-            vic_strlcpy(p->phdr.subsystem, subsystem,
-                sizeof(p->phdr.subsystem));
-        }
     }
 
     /* hdr.keyslots[] */
@@ -3117,6 +3114,8 @@ done:
 
 vic_result_t luks2_format(
     vic_blockdev_t* device,
+    const char* label,
+    const char* subsystem,
     const char* cipher,
     const char* uuid,
     const char* hash,
@@ -3130,8 +3129,6 @@ vic_result_t luks2_format(
     vic_key_t master_key_buf;
     char uuid_buf[VIC_UUID_STRING_SIZE];
     void* data = NULL;
-    const char label[] = "";
-    const char subsystem[] = "";
     size_t num_device_blocks;
 
     if (!_is_valid_device(device))
@@ -3184,14 +3181,14 @@ vic_result_t luks2_format(
     /* Determine the device size in bytes */
     CHECK(_initialize_hdr(
         &ext,
+        label,
+        subsystem,
         master_key,
         master_key_bytes,
         cipher,
-        label,
         uuid,
         hash,
         mk_iterations,
-        subsystem,
         integrity));
 
     /* Verify that there is enough room for at least 1 payload block */

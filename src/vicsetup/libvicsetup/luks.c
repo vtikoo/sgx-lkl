@@ -265,6 +265,8 @@ vic_result_t vic_luks_format(
     {
         CHECK(luks2_format(
             device,
+            NULL, /* label */
+            NULL, /* subsystem */
             cipher,
             uuid,
             hash,
