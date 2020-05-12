@@ -17,3 +17,8 @@ DIRS += $(TOP)/libvicsetup
 
 include ../rules.mak
 -include depend.mak
+
+xxx:
+	head -c 32MB /dev/zero > LUKS
+	vicsetup luksFormat --luks2 LUKS pass
+	vicsetup luksDump LUKS

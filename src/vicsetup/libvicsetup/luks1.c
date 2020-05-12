@@ -1022,16 +1022,14 @@ vic_result_t luks1_format(
     uint64_t mk_iterations,
     uint64_t slot_iterations,
     const vic_key_t* master_key,
-    size_t master_key_bytes,
-    const char* pwd)
+    size_t master_key_bytes)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t hdr;
     vic_key_t master_key_buf;
     void* data = NULL;
-    size_t size;
 
-    if (!_is_valid_device(device) || !pwd || !cipher_name || !cipher_mode)
+    if (!_is_valid_device(device) || !cipher_name || !cipher_mode)
         RAISE(VIC_BAD_PARAMETER);
 
     if (master_key)
@@ -1086,20 +1084,9 @@ vic_result_t luks1_format(
             RAISE(VIC_DEVICE_TOO_SMALL);
     }
 
-    /* Add one key slot */
-    if (_add_key(
-        &hdr, master_key, pwd, slot_iterations, &data, &size, NULL) != 0)
-    {
-        RAISE(VIC_OUT_OF_KEYSLOTS);
-    }
-
     /* Write the hdr structure to the device */
     if (_write_luks1_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_WRITE_FAILED);
-
-    /* Write the key material for key slot 0 */
-    if (_write_key_material(device, &hdr, &hdr.keyslots[0], data) != 0)
-        RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
 
     result = VIC_OK;
 
@@ -1179,6 +1166,71 @@ vic_result_t luks1_add_key(
     }
 
     if (_add_key(hdr, &mk, new_pwd, slot_iterations, &data, &size, &index) != 0)
+    {
+        /* ATTN: be more specific */
+        RAISE(VIC_FAILED);
+    }
+
+    if (index >= LUKS_NUM_KEYS)
+        RAISE(VIC_OUT_OF_BOUNDS);
+
+    /* Write the hdr structure to the device */
+    if (_write_luks1_hdr(device, hdr) != 0)
+        RAISE(VIC_HEADER_WRITE_FAILED);
+
+    /* Write out the stripes */
+    if (_write_key_material(device, hdr, &hdr->keyslots[index], data) != 0)
+        RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
+
+    result = VIC_OK;
+
+done:
+
+    if (hdr)
+        free(hdr);
+
+    if (data)
+        free(data);
+
+    return result;
+}
+
+vic_result_t luks1_add_key_by_master_key(
+    vic_blockdev_t* device,
+    uint64_t slot_iterations,
+    const vic_key_t* master_key,
+    size_t master_key_bytes,
+    const char* pwd)
+{
+    vic_result_t result = VIC_UNEXPECTED;
+    luks1_hdr_t* hdr = NULL;
+    void* data = NULL;
+    size_t size;
+    size_t index;
+
+    if (!_is_valid_device(device))
+        RAISE(VIC_BAD_DEVICE);
+
+    if (!master_key || !pwd)
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (luks1_read_hdr(device, &hdr) != 0)
+        RAISE(VIC_HEADER_READ_FAILED);
+
+    if (master_key_bytes != hdr->key_bytes)
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
+        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+
+    if (_add_key(
+        hdr,
+        master_key,
+        pwd,
+        slot_iterations,
+        &data,
+        &size,
+        &index) != 0)
     {
         /* ATTN: be more specific */
         RAISE(VIC_FAILED);

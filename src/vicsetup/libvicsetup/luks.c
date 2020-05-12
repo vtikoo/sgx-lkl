@@ -240,7 +240,6 @@ vic_result_t vic_luks_format(
     uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    const char* pwd,
     uint32_t flags)
 {
     vic_result_t result = VIC_UNEXPECTED;
@@ -264,8 +263,7 @@ vic_result_t vic_luks_format(
             mk_iterations,
             slot_iterations,
             master_key,
-            master_key_bytes,
-            pwd));
+            master_key_bytes));
     }
     else if (version == LUKS_VERSION_2)
     {
@@ -280,7 +278,6 @@ vic_result_t vic_luks_format(
             pbkdf_memory,
             master_key,
             master_key_bytes,
-            pwd,
             flags));
     }
     else
@@ -518,6 +515,54 @@ vic_result_t vic_luks_close(const char* name)
     }
 
     result = VIC_OK;
+
+done:
+    return result;
+}
+
+
+vic_result_t vic_luks_add_key_by_master_key(
+    vic_blockdev_t* device,
+    const char* keyslot_cipher,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
+    const vic_key_t* master_key,
+    size_t master_key_bytes,
+    const char* pwd)
+{
+    vic_result_t result = VIC_UNEXPECTED;
+    vic_luks_hdr_t hdr;
+
+    if (!_is_valid_device(device))
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (vic_luks_read_hdr(device, &hdr) != 0)
+        RAISE(VIC_FAILED);
+
+    if (hdr.version == LUKS_VERSION_1)
+    {
+        return luks1_add_key_by_master_key(
+            device,
+            slot_iterations,
+            master_key,
+            master_key_bytes,
+            pwd);
+    }
+    else if (hdr.version == LUKS_VERSION_2)
+    {
+        return luks2_add_key_by_master_key(
+            device,
+            keyslot_cipher,
+            slot_iterations,
+            pbkdf_memory,
+            master_key,
+            master_key_bytes,
+            pwd);
+    }
+    else
+    {
+        return VIC_BAD_VERSION;
+    }
 
 done:
     return result;

@@ -123,8 +123,7 @@ int crypt_format(
             0, /* mk_iterations */
             0, /* slot_iterations */
             (const vic_key_t*)volume_key,
-            volume_key_size,
-            NULL)) != VIC_OK) /* pwd */
+            volume_key_size)) != VIC_OK) /* pwd */
         {
             ret = -ENOSYS;
             goto done;

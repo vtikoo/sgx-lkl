@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include "../libvicsetup/hexdump.h"
 #include "../libvicsetup/verity.h"
+#include "../libvicsetup/crypto.h"
+#include "../libvicsetup/lukscommon.h"
 
 #define USAGE \
     "\n" \
@@ -297,6 +299,17 @@ static int luksFormat(int argc, const char* argv[])
     if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
+    if (!keyslot_cipher)
+        keyslot_cipher = LUKS_DEFAULT_CIPHER;
+
+    /* Randomly generate a new key */
+    if (!key)
+    {
+        key = &key_buf;
+        vic_luks_random(&key_buf, sizeof(key_buf));
+        key_size = sizeof(key_buf);
+    }
+
     if ((r = vic_luks_format(
         dev,
         version,
@@ -309,8 +322,19 @@ static int luksFormat(int argc, const char* argv[])
         pbkdf_memory,
         key,
         key_size,
-        pwd,
         integrity)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    if ((r = vic_luks_add_key_by_master_key(
+        dev,
+        keyslot_cipher,
+        0, /* slot_iterations */
+        0, /* pbkdf_memory */
+        key,
+        key_size,
+        pwd)) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }

@@ -91,8 +91,7 @@ vic_result_t luks1_format(
     uint64_t mk_iterations,
     uint64_t slot_iterations,
     const vic_key_t* master_key,
-    size_t master_key_bytes,
-    const char* pwd);
+    size_t master_key_bytes);
 
 int luks1_read_hdr(vic_blockdev_t* device, luks1_hdr_t** hdr_out);
 
@@ -109,6 +108,13 @@ vic_result_t luks1_add_key(
     uint64_t slot_iterations,
     const char* pwd,
     const char* new_pwd);
+
+vic_result_t luks1_add_key_by_master_key(
+    vic_blockdev_t* device,
+    uint64_t slot_iterations,
+    const vic_key_t* master_key,
+    size_t master_key_bytes,
+    const char* pwd);
 
 vic_result_t luks1_change_key(
     vic_blockdev_t* device,

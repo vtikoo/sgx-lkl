@@ -2545,13 +2545,10 @@ static vic_result_t _initialize_hdr(
     const vic_key_t* key,
     size_t key_size,
     const char* cipher,
-    const char* keyslot_cipher,
     const char* label,
     const char* uuid,
     const char* hash,
     uint64_t mk_iterations,
-    uint64_t slot_iterations,
-    uint64_t pbkdf_memory,
     const char* subsystem,
     vic_integrity_t integrity)
 {
@@ -2611,23 +2608,14 @@ static vic_result_t _initialize_hdr(
 
     /* hdr.keyslots[] */
     {
-        luks2_keyslot_t ks;
         const size_t hdr_sizes = 2 * p->phdr.hdr_size;
-
-        if (_init_keyslot(
-            &ks, keyslot_cipher, hash, slot_iterations, pbkdf_memory,
-            key_size, 0) != 0)
-        {
-            RAISE(VIC_FAILED);
-        }
-
-        p->keyslots[0] = ks;
+        size_t area_size = vic_round_up(DEFAULT_AF_STRIPES * key_size, 4096);
 
         /* Calcualte the keyslots size */
         keyslots_size = OVERHEAD_BYTES - hdr_sizes;
 
         /* Verify that keyslots_size is big enough */
-        if (keyslots_size < LUKS2_NUM_KEYSLOTS * ks.area.size)
+        if (keyslots_size < LUKS2_NUM_KEYSLOTS * area_size)
             RAISE(VIC_UNEXPECTED);
     }
 
@@ -2671,7 +2659,6 @@ static vic_result_t _initialize_hdr(
         luks2_digest_t d =
         {
             .type = "pbkdf2",
-            .keyslots = { 1 },
             .segments = { 1 },
             .iterations = mk_iterations,
         };
@@ -3139,7 +3126,6 @@ vic_result_t luks2_format(
     uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    const char* pwd,
     vic_integrity_t integrity)
 {
     vic_result_t result = VIC_UNEXPECTED;
@@ -3151,7 +3137,7 @@ vic_result_t luks2_format(
     const char subsystem[] = "";
     size_t num_device_blocks;
 
-    if (!_is_valid_device(device) || !pwd)
+    if (!_is_valid_device(device))
         RAISE(VIC_BAD_PARAMETER);
 
     if (uuid)
@@ -3213,12 +3199,9 @@ vic_result_t luks2_format(
         master_key,
         master_key_bytes,
         cipher,
-        keyslot_cipher,
         label,
         uuid,
         hash,
-        mk_iterations,
-        slot_iterations,
         pbkdf_memory,
         subsystem,
         integrity));
@@ -3288,16 +3271,6 @@ vic_result_t luks2_format(
         ext->json_size) != 0)
     {
         RAISE(VIC_FAILED);
-    }
-
-    /* Generate and write the key material for key slot 0 */
-    {
-        const luks2_keyslot_t* ks = &ext->keyslots[0];
-
-        CHECK(_generate_key_material(ext, ks, master_key, pwd, &data));
-
-        if (_write_key_material(device, ks, data) != 0)
-            RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
     }
 
     /* Format the integrity header and journals if any */
@@ -3541,6 +3514,85 @@ vic_result_t luks2_add_key(
         const luks2_keyslot_t* ks = &ext->keyslots[index];
 
         CHECK(_generate_key_material(ext, ks, &key, new_pwd, &data));
+
+        if (_write_key_material(device, ks, data) != 0)
+            RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
+    }
+
+    result = VIC_OK;
+
+done:
+
+    if (ext)
+        free(ext);
+
+    if (data)
+        free(data);
+
+    return result;
+}
+
+vic_result_t luks2_add_key_by_master_key(
+    vic_blockdev_t* device,
+    const char* keyslot_cipher,
+    uint64_t slot_iterations,
+    uint64_t pbkdf_memory,
+    const vic_key_t* master_key,
+    size_t master_key_bytes,
+    const char* pwd)
+{
+    vic_result_t result = VIC_UNEXPECTED;
+    luks2_ext_hdr_t* ext = NULL;
+    size_t index;
+    void* data = NULL;
+    const char* hash;
+
+    /* Check parameters */
+    if (!_is_valid_device(device) || !keyslot_cipher || !master_key || !pwd)
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
+        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+
+    if (pbkdf_memory == 0)
+        pbkdf_memory = DEFAULT_PBKDF_MEMORY;
+
+    /* Read the LUKS2 header */
+    if (luks2_read_hdr(device, (luks2_hdr_t**)&ext) != 0)
+        RAISE(VIC_HEADER_READ_FAILED);
+
+    /* Set the hash from the digest */
+    hash = ext->digests[0].hash;
+
+    /* Add a new key slot */
+    {
+        if ((index = _find_free_keyslot(ext)) == (size_t)-1)
+            RAISE(VIC_OUT_OF_KEYSLOTS);
+
+        if (_init_keyslot(
+            &ext->keyslots[index],
+            keyslot_cipher,
+            hash,
+            slot_iterations,
+            pbkdf_memory,
+            master_key_bytes,
+            index) != 0)
+        {
+            RAISE(VIC_FAILED);
+        }
+
+        /* Add this keyslot to the digest[0] */
+        ext->digests[0].keyslots[index] = 1;
+    }
+
+    /* Rewrite the header */
+    CHECK(_write_hdr(device, ext));
+
+    /* Generate and write the key material for the new keyslot */
+    {
+        const luks2_keyslot_t* ks = &ext->keyslots[index];
+
+        CHECK(_generate_key_material(ext, ks, master_key, pwd, &data));
 
         if (_write_key_material(device, ks, data) != 0)
             RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
