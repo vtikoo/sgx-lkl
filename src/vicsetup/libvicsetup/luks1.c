@@ -59,6 +59,8 @@
     }                                                                     \
     while (0)
 
+#define DEFAULT_HASH "sha256"
+
 static uint8_t _magic_1st[LUKS_MAGIC_SIZE] = LUKS_MAGIC_1ST;
 
 static bool _is_valid_device(vic_blockdev_t* dev)
@@ -1021,8 +1023,7 @@ vic_result_t luks1_format(
     uint64_t slot_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    const char* pwd,
-    vic_integrity_t integrity)
+    const char* pwd)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t hdr;
@@ -1033,9 +1034,6 @@ vic_result_t luks1_format(
     if (!_is_valid_device(device) || !pwd || !cipher_name || !cipher_mode)
         RAISE(VIC_BAD_PARAMETER);
 
-    if (integrity)
-        RAISE(VIC_UNSUPPORTED);
-
     if (master_key)
     {
         if (master_key_bytes == 0)
@@ -1044,6 +1042,9 @@ vic_result_t luks1_format(
         if (master_key_bytes > sizeof(vic_key_t))
             RAISE(VIC_KEY_TOO_BIG);
     }
+
+    if (!hash)
+        hash = DEFAULT_HASH;
 
     if (!master_key)
     {

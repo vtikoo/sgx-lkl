@@ -3165,6 +3165,9 @@ vic_result_t luks2_format(
         uuid = uuid_buf;
     }
 
+    if (!hash)
+        hash = DEFAULT_HASH;
+
     if (master_key)
     {
         if (master_key_bytes == 0)

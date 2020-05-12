@@ -265,8 +265,7 @@ vic_result_t vic_luks_format(
             slot_iterations,
             master_key,
             master_key_bytes,
-            pwd,
-            flags));
+            pwd));
     }
     else if (version == LUKS_VERSION_2)
     {

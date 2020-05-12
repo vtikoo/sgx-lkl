@@ -12,13 +12,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define CRYPT_PLAIN "PLAIN"
+#define CRYPT_LUKS NULL
 #define CRYPT_LUKS1 "LUKS1"
 #define CRYPT_LUKS2 "LUKS2"
 #define CRYPT_VERITY "VERITY"
 #define CRYPT_INTEGRITY "INTEGRITY"
-#define CRYPT_BITLK "BITLK"
-#define CRYPT_LUKS NULL
 
 #define CRYPT_ANY_SLOT -1
 
@@ -53,6 +51,14 @@
 #define CRYPT_DEBUG_NONE 0
 
 struct crypt_device;
+
+
+struct crypt_params_luks1
+{
+    const char *hash;
+    size_t data_alignment;
+    const char *data_device;
+};
 
 struct crypt_pbkdf_type
 {
