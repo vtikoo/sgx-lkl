@@ -184,7 +184,8 @@ vic_result_t luks2_format(
     const char* cipher,
     const char* uuid,
     const char* hash,
-    uint64_t mk_iterations,
+    const char* pbkdf_type,
+    uint64_t iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     vic_integrity_t integrity);

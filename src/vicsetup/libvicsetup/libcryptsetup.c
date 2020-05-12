@@ -106,16 +106,21 @@ int crypt_format(
     if (!type)
         type = CRYPT_LUKS1;
 
-    /* Handle LUKS formatting */
     if (strcmp(type, CRYPT_LUKS1) == 0)
     {
         struct crypt_params_luks1* p = params;
+        const char* hash = NULL;
         vic_result_t r;
 
-        if (p->data_alignment || p->data_device)
+        if (p)
         {
-            ret = -ENOTSUP;
-            goto done;
+            if (p->data_alignment || p->data_device)
+            {
+                ret = -ENOTSUP;
+                goto done;
+            }
+
+            hash = p->hash;
         }
 
         if ((r = luks1_format(
@@ -123,7 +128,7 @@ int crypt_format(
             cipher_name,
             cipher_mode,
             uuid,
-            p ? p->hash : NULL,
+            hash,
             0, /* mk_iterations */
             (const vic_key_t*)volume_key,
             volume_key_size)) != VIC_OK) /* pwd */
@@ -139,6 +144,7 @@ int crypt_format(
         const char* hash = NULL;
         const char* label = NULL;
         const char* subsystem = NULL;
+        const char* pbkdf_type = NULL;
         uint64_t iterations = 0;
         vic_integrity_t integrity = VIC_INTEGRITY_NONE;
         vic_result_t r;
@@ -173,12 +179,14 @@ int crypt_format(
             {
                 hash = p->pbkdf->hash;
                 iterations = p->pbkdf->iterations;
+                pbkdf_type = p->pbkdf->type;
 
-                /* ATTN: support type */
+                /* ATTN: how can type be supported? */
                 if (p->pbkdf->time_ms ||
                     p->pbkdf->max_memory_kb ||
                     p->pbkdf->parallel_threads ||
-                    p->pbkdf->flags)
+                    p->pbkdf->flags ||
+                    p->pbkdf->type)
                 {
                     ret = -ENOTSUP;
                     goto done;
@@ -187,7 +195,6 @@ int crypt_format(
         }
 
         n = snprintf(cipher, sizeof(cipher), "%s-%s", cipher_name, cipher_mode);
-
         if (n <= 0 || n >= (int)sizeof(cipher))
         {
             ret = -EINVAL;
@@ -200,6 +207,7 @@ int crypt_format(
             subsystem,
             cipher,
             uuid,
+            pbkdf_type,
             hash,
             iterations,
             (const vic_key_t*)volume_key,
@@ -212,7 +220,9 @@ int crypt_format(
     }
     else
     {
-        /* ATTN: */
+        /* ATTN */
+        ret = -EINVAL;
+        goto done;
     }
 
 done:

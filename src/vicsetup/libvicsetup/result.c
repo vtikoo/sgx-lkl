@@ -114,6 +114,8 @@ const char* vic_result_string(vic_result_t result)
             return "VIC_BAD_BLOCK_SIZE";
         case VIC_BAD_FLAGS:
             return "VIC_BAD_FLAGS";
+        case VIC_BAD_PBKDF_TYPE:
+            return "VIC_BAD_PBKDF_TYPE";
     };
 
     /* Unreachable */

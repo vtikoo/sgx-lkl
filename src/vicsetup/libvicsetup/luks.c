@@ -270,6 +270,7 @@ vic_result_t vic_luks_format(
             cipher,
             uuid,
             hash,
+            "pbkdf2",
             mk_iterations,
             master_key,
             master_key_bytes,

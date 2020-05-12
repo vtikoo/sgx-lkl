@@ -179,6 +179,18 @@ static const char* _get_encryption(luks2_ext_hdr_t* ext)
     return ext->segments[0].encryption;
 }
 
+static bool _valid_pbkdf_type(const char* type)
+{
+    if (strcmp(type, "pbkdf2") == 0 ||
+        strcmp(type, "argon2i") == 0 ||
+        strcmp(type, "argon2id") == 0)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 static json_result_t _json_read_callback(
     json_parser_t* parser,
     json_reason_t reason,
@@ -288,14 +300,10 @@ static json_result_t _json_read_callback(
                     goto done;
                 }
 
-                if (strcmp(ks->kdf.type, "pbkdf2") != 0 &&
-                    strcmp(ks->kdf.type, "argon2i") != 0 &&
-                    strcmp(ks->kdf.type, "argon2id") != 0)
-                {
+                if (!_valid_pbkdf_type(ks->kdf.type))
                 {
                     result = JSON_UNSUPPORTED;
                     goto done;
-                }
                 }
             }
             else if (json_match(parser, "keyslots.#.kdf.time", &i) == JSON_OK)
@@ -2549,7 +2557,8 @@ static vic_result_t _initialize_hdr(
     const char* cipher,
     const char* uuid,
     const char* hash,
-    uint64_t mk_iterations,
+    const char* pbkdf_type,
+    uint64_t iterations,
     vic_integrity_t integrity)
 {
     vic_result_t result = VIC_UNEXPECTED;
@@ -2657,8 +2666,11 @@ static vic_result_t _initialize_hdr(
         {
             .type = "pbkdf2",
             .segments = { 1 },
-            .iterations = mk_iterations,
+            .iterations = iterations,
         };
+
+        if (pbkdf_type)
+            vic_strlcpy(d.type, pbkdf_type, sizeof(d.type));
 
         if ((digest_size = vic_hash_size(hash)) == (size_t)-1)
             RAISE(VIC_UNEXPECTED);
@@ -2735,8 +2747,6 @@ static vic_result_t _initialize_hdr(
 
     *ext_out = p;
     p = NULL;
-
-    (void)key;
 
     result = VIC_OK;
 
@@ -3119,7 +3129,8 @@ vic_result_t luks2_format(
     const char* cipher,
     const char* uuid,
     const char* hash,
-    uint64_t mk_iterations,
+    const char* pbkdf_type,
+    uint64_t iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     vic_integrity_t integrity)
@@ -3145,6 +3156,9 @@ vic_result_t luks2_format(
         uuid = uuid_buf;
     }
 
+    if (pbkdf_type && !_valid_pbkdf_type(pbkdf_type))
+        RAISE(VIC_BAD_PBKDF_TYPE);
+
     if (!hash)
         hash = DEFAULT_HASH;
 
@@ -3168,8 +3182,8 @@ vic_result_t luks2_format(
     if (!cipher)
         cipher = LUKS_DEFAULT_CIPHER;
 
-    if (mk_iterations < LUKS_MIN_MK_ITERATIONS)
-        mk_iterations = LUKS_MIN_MK_ITERATIONS;
+    if (iterations < LUKS_MIN_MK_ITERATIONS)
+        iterations = LUKS_MIN_MK_ITERATIONS;
 
     /* Get the number of sectors in the device */
     CHECK(vic_blockdev_get_num_blocks(device, &num_device_blocks));
@@ -3188,7 +3202,8 @@ vic_result_t luks2_format(
         cipher,
         uuid,
         hash,
-        mk_iterations,
+        pbkdf_type,
+        iterations,
         integrity));
 
     /* Verify that there is enough room for at least 1 payload block */

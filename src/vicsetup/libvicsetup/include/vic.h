@@ -75,6 +75,7 @@ typedef enum _vic_result
     VIC_BAD_BLOCK_DEVICE,
     VIC_BAD_BLOCK_SIZE,
     VIC_BAD_FLAGS,
+    VIC_BAD_PBKDF_TYPE,
 }
 vic_result_t;
 
