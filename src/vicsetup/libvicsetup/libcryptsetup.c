@@ -162,7 +162,6 @@ int crypt_format(
         const char* hash = NULL;
         const char* label = NULL;
         const char* subsystem = NULL;
-        const char* pbkdf_type = NULL;
         uint64_t iterations = 0;
         vic_integrity_t integrity = VIC_INTEGRITY_NONE;
         vic_result_t r;
@@ -195,7 +194,6 @@ int crypt_format(
             {
                 hash = p->pbkdf->hash;
                 iterations = p->pbkdf->iterations;
-                pbkdf_type = p->pbkdf->type;
 
                 if (p->pbkdf->time_ms ||
                     p->pbkdf->max_memory_kb ||
@@ -204,6 +202,8 @@ int crypt_format(
                 {
                     ERAISE(ENOTSUP);
                 }
+
+                /* ATTN: pbkdf.type is never used by format! */
             }
         }
 
@@ -218,7 +218,6 @@ int crypt_format(
             cipher,
             uuid,
             hash,
-            pbkdf_type,
             iterations,
             (const vic_key_t*)volume_key,
             volume_key_size,

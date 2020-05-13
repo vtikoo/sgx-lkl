@@ -2557,7 +2557,6 @@ static vic_result_t _initialize_hdr(
     const char* cipher,
     const char* uuid,
     const char* hash,
-    const char* pbkdf_type,
     uint64_t iterations,
     vic_integrity_t integrity)
 {
@@ -2668,9 +2667,6 @@ static vic_result_t _initialize_hdr(
             .segments = { 1 },
             .iterations = iterations,
         };
-
-        if (pbkdf_type)
-            vic_strlcpy(d.type, pbkdf_type, sizeof(d.type));
 
         if ((digest_size = vic_hash_size(hash)) == (size_t)-1)
             RAISE(VIC_UNEXPECTED);
@@ -3129,7 +3125,6 @@ vic_result_t luks2_format(
     const char* cipher,
     const char* uuid,
     const char* hash,
-    const char* pbkdf_type,
     uint64_t iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
@@ -3155,9 +3150,6 @@ vic_result_t luks2_format(
         vic_uuid_generate(uuid_buf);
         uuid = uuid_buf;
     }
-
-    if (pbkdf_type && !_valid_pbkdf_type(pbkdf_type))
-        RAISE(VIC_BAD_PBKDF_TYPE);
 
     if (!hash)
         hash = DEFAULT_HASH;
@@ -3202,7 +3194,6 @@ vic_result_t luks2_format(
         cipher,
         uuid,
         hash,
-        pbkdf_type,
         iterations,
         integrity));
 
