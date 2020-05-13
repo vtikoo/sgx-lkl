@@ -245,6 +245,7 @@ vic_result_t vic_luks_format(
 vic_result_t vic_luks_recover_master_key(
     vic_blockdev_t* device,
     const char* pwd,
+    size_t pwd_size,
     vic_key_t* master_key,
     size_t* master_key_bytes);
 
@@ -254,7 +255,9 @@ vic_result_t vic_luks_add_key(
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
     const char* pwd,
-    const char* new_pwd);
+    size_t pwd_size,
+    const char* new_pwd,
+    size_t new_pwd_size);
 
 vic_result_t vic_luks_add_key_by_master_key(
     vic_blockdev_t* device,
@@ -263,16 +266,20 @@ vic_result_t vic_luks_add_key_by_master_key(
     uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    const char* pwd);
+    const char* pwd,
+    size_t pwd_size);
 
 vic_result_t vic_luks_remove_key(
     vic_blockdev_t* device,
-    const char* pwd);
+    const char* pwd,
+    size_t pwd_size);
 
 vic_result_t vic_luks_change_key(
     vic_blockdev_t* device,
     const char* old_pwd,
-    const char* new_pwd);
+    size_t old_pwd_size,
+    const char* new_pwd,
+    size_t new_pwd_size);
 
 vic_result_t vic_luks_stat(vic_blockdev_t* device, vic_luks_stat_t* buf);
 

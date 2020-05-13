@@ -153,6 +153,7 @@ done:
 vic_result_t vic_luks_recover_master_key(
     vic_blockdev_t* device,
     const char* pwd,
+    size_t pwd_size,
     vic_key_t* master_key,
     size_t* master_key_bytes)
 {
@@ -170,6 +171,7 @@ vic_result_t vic_luks_recover_master_key(
         CHECK(luks1_recover_master_key(
             device,
             pwd,
+            pwd_size,
             master_key,
             master_key_bytes));
     }
@@ -178,6 +180,7 @@ vic_result_t vic_luks_recover_master_key(
         CHECK(luks2_recover_master_key(
             device,
             pwd,
+            pwd_size,
             master_key,
             master_key_bytes));
     }
@@ -292,7 +295,9 @@ vic_result_t vic_luks_add_key(
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
     const char* pwd,
-    const char* new_pwd)
+    size_t pwd_size,
+    const char* new_pwd,
+    size_t new_pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
@@ -305,12 +310,13 @@ vic_result_t vic_luks_add_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_add_key(device, slot_iterations, pwd, new_pwd);
+        return luks1_add_key(device, slot_iterations, pwd, pwd_size, new_pwd,
+            new_pwd_size);
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
         return luks2_add_key(device, keyslot_cipher, slot_iterations,
-            pbkdf_memory, pwd, new_pwd);
+            pbkdf_memory, pwd, pwd_size, new_pwd, new_pwd_size);
     }
     else
     {
@@ -321,7 +327,10 @@ done:
     return result;
 }
 
-vic_result_t vic_luks_remove_key(vic_blockdev_t* device, const char* pwd)
+vic_result_t vic_luks_remove_key(
+    vic_blockdev_t* device,
+    const char* pwd,
+    size_t pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
@@ -334,11 +343,11 @@ vic_result_t vic_luks_remove_key(vic_blockdev_t* device, const char* pwd)
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_remove_key(device, pwd);
+        return luks1_remove_key(device, pwd, pwd_size);
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_remove_key(device, pwd);
+        return luks2_remove_key(device, pwd, pwd_size);
     }
     else
     {
@@ -352,7 +361,9 @@ done:
 vic_result_t vic_luks_change_key(
     vic_blockdev_t* device,
     const char* old_pwd,
-    const char* new_pwd)
+    size_t old_pwd_size,
+    const char* new_pwd,
+    size_t new_pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
@@ -365,11 +376,13 @@ vic_result_t vic_luks_change_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_change_key(device, old_pwd, new_pwd);
+        return luks1_change_key(device, old_pwd, old_pwd_size, new_pwd,
+            new_pwd_size);
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_change_key(device, old_pwd, new_pwd);
+        return luks2_change_key(device, old_pwd, old_pwd_size, new_pwd,
+            new_pwd_size);
     }
     else
     {
@@ -523,7 +536,8 @@ vic_result_t vic_luks_add_key_by_master_key(
     uint64_t pbkdf_memory,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    const char* pwd)
+    const char* pwd,
+    size_t pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     vic_luks_hdr_t hdr;
@@ -541,7 +555,8 @@ vic_result_t vic_luks_add_key_by_master_key(
             slot_iterations,
             master_key,
             master_key_bytes,
-            pwd);
+            pwd,
+            pwd_size);
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
@@ -552,7 +567,8 @@ vic_result_t vic_luks_add_key_by_master_key(
             pbkdf_memory,
             master_key,
             master_key_bytes,
-            pwd);
+            pwd,
+            pwd_size);
     }
     else
     {

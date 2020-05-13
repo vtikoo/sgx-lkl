@@ -778,6 +778,7 @@ static int _add_key(
     luks1_hdr_t* hdr,
     const vic_key_t* master_key,
     const char* pwd,
+    size_t pwd_size,
     uint64_t slot_iterations,
     void** data_out,
     size_t* size_out,
@@ -836,7 +837,7 @@ static int _add_key(
 
     if (vic_luks_pbkdf2(
         (const uint8_t*)pwd,
-        strlen(pwd),
+        pwd_size,
         ks->salt,
         sizeof(ks->salt),
         ks->iterations,
@@ -890,6 +891,7 @@ static vic_result_t _find_key_by_pwd(
     vic_blockdev_t* device,
     luks1_hdr_t* hdr,
     const char* pwd,
+    size_t pwd_size,
     vic_key_t* master_key,
     vic_luks_keyslot_t** ks_out)
 {
@@ -917,7 +919,7 @@ static vic_result_t _find_key_by_pwd(
 
             if (vic_luks_pbkdf2(
                 (const uint8_t*)pwd,
-                strlen(pwd),
+                pwd_size,
                 ks->salt,
                 sizeof(ks->salt),
                 ks->iterations,
@@ -1097,6 +1099,7 @@ done:
 vic_result_t luks1_recover_master_key(
     vic_blockdev_t* device,
     const char* pwd,
+    size_t pwd_size,
     vic_key_t* master_key,
     size_t* master_key_bytes)
 {
@@ -1115,7 +1118,7 @@ vic_result_t luks1_recover_master_key(
     if (luks1_read_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
-    CHECK(_find_key_by_pwd(device, hdr, pwd, master_key, NULL));
+    CHECK(_find_key_by_pwd(device, hdr, pwd, pwd_size, master_key, NULL));
 
     if (master_key_bytes)
         *master_key_bytes = hdr->key_bytes;
@@ -1134,7 +1137,9 @@ vic_result_t luks1_add_key(
     vic_blockdev_t* device,
     uint64_t slot_iterations,
     const char* pwd,
-    const char* new_pwd)
+    size_t pwd_size,
+    const char* new_pwd,
+    size_t new_pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr = NULL;
@@ -1155,13 +1160,14 @@ vic_result_t luks1_add_key(
     if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
         slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
 
-    if (vic_luks_recover_master_key(device, pwd, &mk, NULL) != 0)
+    if (vic_luks_recover_master_key(device, pwd, pwd_size, &mk, NULL) != 0)
     {
         /* ATTN: be more specific */
         RAISE(VIC_FAILED);
     }
 
-    if (_add_key(hdr, &mk, new_pwd, slot_iterations, &data, &size, &index) != 0)
+    if (_add_key(hdr, &mk, new_pwd, new_pwd_size, slot_iterations, &data,
+        &size, &index) != 0)
     {
         /* ATTN: be more specific */
         RAISE(VIC_FAILED);
@@ -1196,7 +1202,8 @@ vic_result_t luks1_add_key_by_master_key(
     uint64_t slot_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    const char* pwd)
+    const char* pwd,
+    size_t pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr = NULL;
@@ -1223,6 +1230,7 @@ vic_result_t luks1_add_key_by_master_key(
         hdr,
         master_key,
         pwd,
+        pwd_size,
         slot_iterations,
         &data,
         &size,
@@ -1256,7 +1264,10 @@ done:
     return result;
 }
 
-vic_result_t luks1_remove_key(vic_blockdev_t* device, const char* pwd)
+vic_result_t luks1_remove_key(
+    vic_blockdev_t* device,
+    const char* pwd,
+    size_t pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr = NULL;
@@ -1271,7 +1282,7 @@ vic_result_t luks1_remove_key(vic_blockdev_t* device, const char* pwd)
     if (luks1_read_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
-    CHECK(_find_key_by_pwd(device, hdr, pwd, NULL, &ks));
+    CHECK(_find_key_by_pwd(device, hdr, pwd, pwd_size, NULL, &ks));
 
     /* Disable the key slot */
     memset(ks->salt, 0, sizeof(ks->salt));
@@ -1342,7 +1353,9 @@ done:
 vic_result_t luks1_change_key(
     vic_blockdev_t* device,
     const char* old_pwd,
-    const char* new_pwd)
+    size_t old_pwd_size,
+    const char* new_pwd,
+    size_t new_pwd_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks1_hdr_t* hdr = NULL;
@@ -1362,7 +1375,7 @@ vic_result_t luks1_change_key(
     if (luks1_read_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
-    CHECK(_find_key_by_pwd(device, hdr, old_pwd, &mk, &ks));
+    CHECK(_find_key_by_pwd(device, hdr, old_pwd, old_pwd_size, &mk, &ks));
 
     /* Generate a new salt for this key slot */
     vic_luks_random(ks->salt, sizeof(ks->salt));
@@ -1378,7 +1391,7 @@ vic_result_t luks1_change_key(
 
     if (vic_luks_pbkdf2(
         (const uint8_t*)new_pwd,
-        strlen(new_pwd),
+        new_pwd_size,
         ks->salt,
         sizeof(ks->salt),
         ks->iterations,

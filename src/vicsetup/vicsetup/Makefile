@@ -23,7 +23,8 @@ OPTS += --cipher "aes"
 OPTS += --cipher-mode "xts-plain64"
 OPTS += --luks2
 
-xxx:
+xxx: $(PROGRAM)
 	head -c 64 /dev/urandom > KEY
 	head -c 32M /dev/zero > LUKS
 	vicsetup cryptsetupLuksFormat $(OPTS) LUKS pass
+	vicsetup luksDump LUKS

@@ -332,7 +332,8 @@ static int luksFormat(int argc, const char* argv[])
         pbkdf_memory,
         key,
         key_size,
-        pwd)) != VIC_OK)
+        pwd,
+        strlen(pwd))) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
@@ -580,6 +581,7 @@ static int luksGetMasterKey(int argc, const char* argv[])
     if ((r = vic_luks_recover_master_key(
         dev,
         pwd,
+        strlen(pwd),
         &key,
         &key_size)) != VIC_OK)
     {
@@ -632,7 +634,7 @@ static int luksAddKey(int argc, const char* argv[])
         err("cannot open %s\n", luksfile);
 
     if ((r = vic_luks_add_key(dev, keyslot_cipher, slot_iterations,
-        pbkdf_memory, pwd, new_pwd)) != VIC_OK)
+        pbkdf_memory, pwd, strlen(pwd), new_pwd, strlen(new_pwd))) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
@@ -668,7 +670,9 @@ static int luksChangeKey(int argc, const char* argv[])
     if ((r = vic_luks_change_key(
         dev,
         old_pwd,
-        new_pwd)) != VIC_OK)
+        strlen(old_pwd),
+        new_pwd,
+        strlen(new_pwd))) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
@@ -700,7 +704,7 @@ static int luksRemoveKey(int argc, const char* argv[])
     if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
-    if ((r = vic_luks_remove_key(dev, pwd)) != VIC_OK)
+    if ((r = vic_luks_remove_key(dev, pwd, strlen(pwd))) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
@@ -738,6 +742,7 @@ static int luksOpen(int argc, const char* argv[])
     if ((r = vic_luks_recover_master_key(
         dev,
         pwd,
+        strlen(pwd),
         &key,
         &key_size)) != VIC_OK)
     {

@@ -10,13 +10,42 @@
 #include "luks1.h"
 #include "luks2.h"
 #include "integrity.h"
+#include "strings.h"
+#include "crypto.h"
+
+#define MAGIC 0xa8ea23c6
 
 struct crypt_device
 {
+    char type[16];
+    uint32_t magic;
     vic_blockdev_t* vbd;
     char path[PATH_MAX];
     bool readonly;
+
+    struct
+    {
+        char pbkdf_type[32];
+        char cipher[LUKS2_ENCRYPTION_SIZE];
+        vic_key_t volume_key;
+        size_t volume_key_size;
+    }
+    luks2;
 };
+
+static bool _valid_cd(const struct crypt_device* cd)
+{
+    return cd && cd->magic == MAGIC;
+}
+
+static bool _valid_type(const char* type)
+{
+    return
+        strcmp(type, CRYPT_LUKS1) == 0 ||
+        strcmp(type, CRYPT_LUKS2) == 0 ||
+        strcmp(type, CRYPT_VERITY) == 0 ||
+        strcmp(type, CRYPT_INTEGRITY) == 0;
+}
 
 int crypt_init(struct crypt_device** cd_out, const char* device)
 {
@@ -45,7 +74,7 @@ int crypt_init(struct crypt_device** cd_out, const char* device)
     }
 
     cd->readonly = true;
-
+    cd->magic = MAGIC;
     *cd_out = cd;
     cd = NULL;
 
@@ -93,6 +122,8 @@ void crypt_free(struct crypt_device* cd)
 
 static bool _valid_key_size(size_t key_size)
 {
+    VIC_STATIC_ASSERT(sizeof(vic_key_t) == 64);
+
     switch (key_size)
     {
         case 16:
@@ -116,17 +147,28 @@ int crypt_format(
 {
     int ret = 0;
 
-    if (!cd || !cipher_name || !cipher_mode)
+    if (!type)
+        type = CRYPT_LUKS1;
+
+    if (!_valid_cd(cd) || _valid_type(type) || !cipher_name || !cipher_mode)
         ERAISE(EINVAL);
 
     if (!_valid_key_size(volume_key_size))
         ERAISE(EINVAL);
 
-    /* Type defaults to LUKS version 1 */
-    if (!type)
-        type = CRYPT_LUKS1;
+    /* Generate a volume key if volume_key is null */
+    if (!volume_key)
+    {
+        /* Save in crypt device for later (used when adding keyslots) */
+        vic_luks_random(&cd->luks2.volume_key, volume_key_size);
+        cd->luks2.volume_key_size = volume_key_size;
+        volume_key = (const char*)cd->luks2.volume_key.buf;
+    }
 
     ECHECK(_reopen_for_write(cd));
+
+    /* Save the type for use in subsequent calls */
+    vic_strlcpy(cd->type, type, sizeof(cd->type));
 
     if (strcmp(type, CRYPT_LUKS1) == 0)
     {
@@ -203,13 +245,18 @@ int crypt_format(
                     ERAISE(ENOTSUP);
                 }
 
-                /* ATTN: pbkdf.type is never used by format! */
+                /* Save pbkdf type for later (used when adding keyslots) */
+                vic_strlcpy(cd->luks2.pbkdf_type, p->pbkdf->type,
+                    sizeof(cd->luks2.pbkdf_type));
             }
         }
 
         n = snprintf(cipher, sizeof(cipher), "%s-%s", cipher_name, cipher_mode);
         if (n <= 0 || n >= (int)sizeof(cipher))
             ERAISE(EINVAL);
+
+        /* Save the cipher for later (used when adding keyslots) */
+        vic_strlcpy(cd->luks2.cipher, cipher, sizeof(cd->luks2.cipher));
 
         if ((r = luks2_format(
             cd->vbd,
@@ -225,6 +272,80 @@ int crypt_format(
         {
             ERAISE(EINVAL);
         }
+    }
+    else
+    {
+        ERAISE(EINVAL);
+    }
+
+done:
+    return ret;
+}
+
+int crypt_keyslot_add_by_key(
+    struct crypt_device* cd,
+    int keyslot,
+    const char* volume_key,
+    size_t volume_key_size,
+    const char* passphrase,
+    size_t passphrase_size,
+    uint32_t flags)
+{
+    int ret = 0;
+
+    /* Check parameters */
+    {
+        if (!_valid_cd(cd))
+            ERAISE(EINVAL);
+
+        if (keyslot != CRYPT_ANY_SLOT &&
+            !(keyslot >= 0 && keyslot < LUKS2_NUM_KEYSLOTS))
+        {
+            ERAISE(EINVAL);
+        }
+
+        /* If volume_key is null, use the one stored by crypt_format() */
+        if (!volume_key)
+        {
+            if (volume_key_size != 0)
+                ERAISE(EINVAL);
+
+            volume_key = (const char*)cd->luks2.volume_key.buf;
+            volume_key_size = cd->luks2.volume_key_size;
+        }
+
+        if (_valid_key_size(volume_key_size))
+            ERAISE(EINVAL);
+
+        if (!passphrase || !passphrase_size)
+            ERAISE(EINVAL);
+
+        /* ATTN: no flags supported */
+        if (flags != 0)
+            ERAISE(EINVAL);
+
+        if (!_valid_type(cd->type))
+            ERAISE(EINVAL);
+    }
+
+    /* Add the keyslot */
+    if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+    {
+        vic_result_t r;
+
+        if ((r = luks1_add_key_by_master_key(
+            cd->vbd,
+            0,
+            (const vic_key_t*)volume_key,
+            volume_key_size,
+            passphrase,
+            passphrase_size)) != VIC_OK)
+        {
+            ERAISE(EINVAL);
+        }
+    }
+    else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+    {
     }
     else
     {
