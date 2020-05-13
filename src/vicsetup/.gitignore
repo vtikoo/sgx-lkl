@@ -12,3 +12,5 @@ tests/verity/hashtree
 tests/verity/verity
 tests/verity/verity.hash
 vicsetup/depend.mak
+tests/cryptsetup/KEY
+tests/cryptsetup/LUKS
