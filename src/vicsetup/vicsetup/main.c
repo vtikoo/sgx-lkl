@@ -8,6 +8,7 @@
 #include "../libvicsetup/verity.h"
 #include "../libvicsetup/crypto.h"
 #include "../libvicsetup/lukscommon.h"
+#include "../libvicsetup/include/libcryptsetup.h"
 
 #define USAGE \
     "\n" \
@@ -337,6 +338,216 @@ static int luksFormat(int argc, const char* argv[])
     }
 
     vic_blockdev_close(dev);
+
+    return 0;
+}
+
+static int cryptsetupLuksFormat(int argc, const char* argv[])
+{
+    struct crypt_device* cd;
+    const char* type = NULL;
+    const char* cipher = NULL;
+    const char* cipher_mode = NULL;
+    const char* keyslot_cipher = NULL;
+    const char* uuid = NULL;
+    const char* hash = NULL;
+    const char* keyfile = NULL;
+    const vic_key_t* key = NULL;
+    vic_key_t key_buf;
+    size_t key_size = 0;
+    vic_integrity_t integrity = VIC_INTEGRITY_NONE;
+    extern vic_integrity_t vic_integrity_enum(const char* str);
+    uint64_t mk_iterations = 0;
+    uint64_t slot_iterations = 0;
+    uint64_t pbkdf_memory = 0;
+    int r;
+
+    /* Get --luks1 option */
+    if (get_opt(&argc, argv, "--luks1", NULL) == 0)
+        type = CRYPT_LUKS1;
+
+    /* Get --luks2 option */
+    if (get_opt(&argc, argv, "--luks2", NULL) == 0)
+        type = CRYPT_LUKS2;
+
+    /* Get --cipher option */
+    get_opt(&argc, argv, "--cipher", &cipher);
+
+    /* Get --cipher-mode option */
+    get_opt(&argc, argv, "--cipher-mode", &cipher_mode);
+
+    /* Get --keyslot-cipher option */
+    get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
+
+    /* Get --uuid option */
+    get_opt(&argc, argv, "--uuid", &uuid);
+
+    /* Get --hash option */
+    get_opt(&argc, argv, "--hash", &hash);
+
+    /* Get --keyfile option */
+    {
+        get_opt(&argc, argv, "--keyfile", &keyfile);
+
+        if (keyfile)
+        {
+            if (vic_luks_load_key(keyfile, &key_buf, &key_size) != VIC_OK)
+                err("failed to load keyfile: %s", keyfile);
+
+            key = &key_buf;
+        }
+    }
+
+    /* Get --integrity option */
+    {
+        const char* opt;
+
+        get_opt(&argc, argv, "--integrity", &opt);
+
+        if (opt)
+        {
+            integrity = vic_integrity_enum(opt);
+
+            if (integrity == VIC_INTEGRITY_NONE)
+                err("unknown --integrity option: %s", opt);
+        }
+    }
+
+    /* Get --mk-iterations option */
+    get_opt_u64(&argc, argv, "--mk-iterations", &mk_iterations);
+
+    /* Get --slot-iterations option */
+    get_opt_u64(&argc, argv, "--slot-iterations", &slot_iterations);
+
+    /* Get --pbkdf-memory option */
+    get_opt_u64(&argc, argv, "--pbkdf-memory", &pbkdf_memory);
+
+    /* Check usage */
+    if (argc != 4)
+    {
+        fprintf(stderr,
+            "Usage: %s %s [OPTIONS] <luksfile> <pwd>\n"
+            "OPTIONS:\n"
+            "    --luks1\n"
+            "    --luks2\n"
+            "    --cipher <cipher>\n"
+            "    --keyslot-cipher <cipher>\n"
+            "    --uuid <uuid>\n"
+            "    --hash <type>\n"
+            "    --keyfile <keyfile>\n"
+            "    --integrity <type>\n"
+            "    --mk-iterations <count>\n"
+            "    --slot-iterations <count>\n"
+            "    --pbkdf-memory <count>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    (void)type;
+
+    const char* luksfile = argv[2];
+#if 0
+    const char* pwd = argv[3];
+#endif
+
+    if (crypt_init(&cd, luksfile) != 0)
+        err("crypt_init() failed: %s\n", luksfile);
+
+    if (!keyslot_cipher)
+        keyslot_cipher = LUKS_DEFAULT_CIPHER;
+
+    /* Randomly generate a new key */
+    if (!key)
+    {
+        key = &key_buf;
+        vic_luks_random(&key_buf, sizeof(key_buf));
+        key_size = sizeof(key_buf);
+    }
+
+    if (!type || strcmp(type, CRYPT_LUKS1) == 0)
+    {
+        struct crypt_params_luks1 params =
+        {
+            .hash = "sha256",
+        };
+
+        if (hash)
+            params.hash = hash;
+
+        if ((r = crypt_format(
+            cd,
+            CRYPT_LUKS1,
+            cipher,
+            cipher_mode,
+            NULL,
+            NULL,
+            key_size,
+            &params)) != 0)
+        {
+            err("crypt_format() failed: %d %s\n", r, strerror(r));
+        }
+    }
+    else if (strcmp(type, CRYPT_LUKS2) == 0)
+    {
+        struct crypt_pbkdf_type pbkdf =
+        {
+            .type = "pbkdf2",
+            .hash = "sha256",
+            .iterations = 1000,
+            // .time_ms = 1,
+            // .flags = CRYPT_PBKDF_NO_BENCHMARK
+        };
+        struct crypt_params_luks2 params =
+        {
+            .sector_size = VIC_SECTOR_SIZE,
+            .pbkdf = &pbkdf,
+        };
+
+        if ((r = crypt_format(
+            cd,
+            CRYPT_LUKS2,
+            cipher,
+            cipher_mode,
+            NULL,
+            NULL,
+            key_size,
+            &params)) != 0)
+        {
+            err("crypt_format() failed: %d %s\n", r, strerror(r));
+        }
+    }
+
+#if 0
+    if ((r = vic_luks_format(
+        dev,
+        version,
+        cipher,
+        uuid,
+        hash,
+        mk_iterations,
+        key,
+        key_size,
+        integrity)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+
+    if ((r = vic_luks_add_key_by_master_key(
+        dev,
+        keyslot_cipher,
+        slot_iterations,
+        pbkdf_memory,
+        key,
+        key_size,
+        pwd)) != VIC_OK)
+    {
+        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+    }
+#endif
+
+    crypt_free(cd);
 
     return 0;
 }
@@ -839,6 +1050,10 @@ int main(int argc, const char* argv[])
     else if (strcmp(argv[1], "verityClose") == 0)
     {
         return verityClose(argc, argv);
+    }
+    else if (strcmp(argv[1], "cryptsetupLuksFormat") == 0)
+    {
+        return cryptsetupLuksFormat(argc, argv);
     }
     else
     {

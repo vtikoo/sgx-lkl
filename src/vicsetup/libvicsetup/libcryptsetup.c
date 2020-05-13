@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "eraise.h"
 #include "luks1.h"
 #include "luks2.h"
 #include "integrity.h"
@@ -14,6 +15,7 @@ struct crypt_device
 {
     vic_blockdev_t* vbd;
     char path[PATH_MAX];
+    bool readonly;
 };
 
 int crypt_init(struct crypt_device** cd_out, const char* device)
@@ -42,6 +44,8 @@ int crypt_init(struct crypt_device** cd_out, const char* device)
         goto done;
     }
 
+    cd->readonly = true;
+
     *cd_out = cd;
     cd = NULL;
 
@@ -50,6 +54,28 @@ done:
     if (cd)
         crypt_free(cd);
 
+    return ret;
+}
+
+static int _reopen_for_write(struct crypt_device* cd)
+{
+    int ret = 0;
+
+    if (!cd)
+        ERAISE(EINVAL);
+
+    if (cd->readonly)
+    {
+        if (vic_blockdev_close(cd->vbd) != VIC_OK)
+            ERAISE(EIO);
+
+        if (vic_blockdev_open(cd->path, VIC_RDWR, 0, &cd->vbd) != VIC_OK)
+            ERAISE(EIO);
+
+        cd->readonly = false;
+    }
+
+done:
     return ret;
 }
 
@@ -91,20 +117,16 @@ int crypt_format(
     int ret = 0;
 
     if (!cd || !cipher_name || !cipher_mode)
-    {
-        ret = -EINVAL;
-        goto done;
-    }
+        ERAISE(EINVAL);
 
-    if (!volume_key || !_valid_key_size(volume_key_size))
-    {
-        ret = -EINVAL;
-        goto done;
-    }
+    if (!_valid_key_size(volume_key_size))
+        ERAISE(EINVAL);
 
     /* Type defaults to LUKS version 1 */
     if (!type)
         type = CRYPT_LUKS1;
+
+    ECHECK(_reopen_for_write(cd));
 
     if (strcmp(type, CRYPT_LUKS1) == 0)
     {
@@ -115,10 +137,7 @@ int crypt_format(
         if (p)
         {
             if (p->data_alignment || p->data_device)
-            {
-                ret = -ENOTSUP;
-                goto done;
-            }
+                ERAISE(ENOTSUP);
 
             hash = p->hash;
         }
@@ -133,8 +152,7 @@ int crypt_format(
             (const vic_key_t*)volume_key,
             volume_key_size)) != VIC_OK) /* pwd */
         {
-            ret = -ENOSYS;
-            goto done;
+            ERAISE(EINVAL);
         }
     }
     else if (strcmp(type, CRYPT_LUKS2) == 0)
@@ -156,10 +174,9 @@ int crypt_format(
             if (p->integrity_params ||
                 p->data_alignment ||
                 p->data_device ||
-                p->sector_size)
+                (p->sector_size && p->sector_size != VIC_SECTOR_SIZE))
             {
-                ret = -ENOTSUP;
-                goto done;
+                ERAISE(ENOTSUP);
             }
 
             label = p->label;
@@ -170,8 +187,7 @@ int crypt_format(
                 if ((integrity = vic_integrity_enum(
                     p->integrity)) == VIC_INTEGRITY_NONE)
                 {
-                    ret = -EINVAL;
-                    goto done;
+                    ERAISE(EINVAL);
                 }
             }
 
@@ -181,25 +197,19 @@ int crypt_format(
                 iterations = p->pbkdf->iterations;
                 pbkdf_type = p->pbkdf->type;
 
-                /* ATTN: how can type be supported? */
                 if (p->pbkdf->time_ms ||
                     p->pbkdf->max_memory_kb ||
                     p->pbkdf->parallel_threads ||
-                    p->pbkdf->flags ||
-                    p->pbkdf->type)
+                    p->pbkdf->flags)
                 {
-                    ret = -ENOTSUP;
-                    goto done;
+                    ERAISE(ENOTSUP);
                 }
             }
         }
 
         n = snprintf(cipher, sizeof(cipher), "%s-%s", cipher_name, cipher_mode);
         if (n <= 0 || n >= (int)sizeof(cipher))
-        {
-            ret = -EINVAL;
-            goto done;
-        }
+            ERAISE(EINVAL);
 
         if ((r = luks2_format(
             cd->vbd,
@@ -207,22 +217,19 @@ int crypt_format(
             subsystem,
             cipher,
             uuid,
-            pbkdf_type,
             hash,
+            pbkdf_type,
             iterations,
             (const vic_key_t*)volume_key,
             volume_key_size,
             VIC_INTEGRITY_NONE)) != VIC_OK)
         {
-            ret = -ENOSYS;
-            goto done;
+            ERAISE(EINVAL);
         }
     }
     else
     {
-        /* ATTN */
-        ret = -EINVAL;
-        goto done;
+        ERAISE(EINVAL);
     }
 
 done:
