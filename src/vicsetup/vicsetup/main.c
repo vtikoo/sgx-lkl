@@ -363,8 +363,7 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     const vic_key_t* key = NULL;
     vic_key_t key_buf;
     size_t key_size = 0;
-    vic_integrity_t integrity = VIC_INTEGRITY_NONE;
-    extern vic_integrity_t vic_integrity_enum(const char* str);
+    const char* integrity = NULL;
     uint64_t mk_iterations = 0;
     uint64_t slot_iterations = 0;
     const char* pbkdf_type = NULL;
@@ -413,19 +412,7 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     }
 
     /* Get --integrity option */
-    {
-        const char* opt;
-
-        get_opt(&argc, argv, "--integrity", &opt);
-
-        if (opt)
-        {
-            integrity = vic_integrity_enum(opt);
-
-            if (integrity == VIC_INTEGRITY_NONE)
-                err("unknown --integrity option: %s", opt);
-        }
-    }
+    get_opt(&argc, argv, "--integrity", &integrity);
 
     /* Get --mk-iterations option */
     get_opt_u64(&argc, argv, "--mk-iterations", &mk_iterations);
@@ -536,6 +523,7 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
         {
             .sector_size = VIC_SECTOR_SIZE,
             .pbkdf = &pbkdf,
+            .integrity = integrity
         };
 
         if ((r = crypt_format(

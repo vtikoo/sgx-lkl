@@ -230,7 +230,7 @@ int crypt_format(
             hash,
             0, /* mk_iterations */
             (const vic_key_t*)volume_key,
-            volume_key_size)) != VIC_OK) /* pwd */
+            volume_key_size)) != VIC_OK)
         {
             ERAISE(EINVAL);
         }
@@ -297,7 +297,7 @@ int crypt_format(
             iterations,
             (const vic_key_t*)volume_key,
             volume_key_size,
-            VIC_INTEGRITY_NONE)) != VIC_OK)
+            integrity)) != VIC_OK)
         {
             ERAISE(EINVAL);
         }
