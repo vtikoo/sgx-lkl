@@ -2597,8 +2597,10 @@ static int _init_keyslot(
 
     vic_luks_random(ks.kdf.salt, sizeof(ks.kdf.salt));
 
+#if 0
     if ((ks.kdf.cpus = vic_num_cpus()) == (uint64_t)-1)
         GOTO(done);
+#endif
 
     *ks_out = ks;
 

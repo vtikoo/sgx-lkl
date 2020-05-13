@@ -26,6 +26,7 @@
     "    verityDump\n" \
     "    verityFormat\n" \
     "    verityOpen\n" \
+    "    cryptsetupLuksFormat\n" \
     "\n"
 
 static const char* arg0;
@@ -366,7 +367,10 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     extern vic_integrity_t vic_integrity_enum(const char* str);
     uint64_t mk_iterations = 0;
     uint64_t slot_iterations = 0;
+    const char* pbkdf_type = NULL;
     uint64_t pbkdf_memory = 0;
+    uint64_t pbkdf_parallel = 0;
+    uint64_t iter_time = 0;
     int r;
 
     /* Get --luks1 option */
@@ -382,6 +386,9 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
 
     /* Get --cipher-mode option */
     get_opt(&argc, argv, "--cipher-mode", &cipher_mode);
+
+    /* Get --pbkdf option */
+    get_opt(&argc, argv, "--pbkdf", &pbkdf_type);
 
     /* Get --keyslot-cipher option */
     get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
@@ -429,6 +436,12 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     /* Get --pbkdf-memory option */
     get_opt_u64(&argc, argv, "--pbkdf-memory", &pbkdf_memory);
 
+    /* Get --pbkdf-parallel option */
+    get_opt_u64(&argc, argv, "--pbkdf-parallel", &pbkdf_parallel);
+
+    /* Get --iter-time option */
+    get_opt_u64(&argc, argv, "--iter-time", &iter_time);
+
     /* Check usage */
     if (argc != 4)
     {
@@ -445,19 +458,18 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
             "    --integrity <type>\n"
             "    --mk-iterations <count>\n"
             "    --slot-iterations <count>\n"
+            "    --pbkdf <type>\n"
             "    --pbkdf-memory <count>\n"
+            "    --pbkdf-parallel <count>\n"
+            "    --iter-time <milliseconds>\n"
             "\n",
             argv[0],
             argv[1]);
         exit(1);
     }
 
-    (void)type;
-
     const char* luksfile = argv[2];
-#if 0
     const char* pwd = argv[3];
-#endif
 
     if (crypt_init(&cd, luksfile) != 0)
         err("crypt_init() failed: %s\n", luksfile);
@@ -495,16 +507,30 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
         {
             err("crypt_format() failed: %d %s\n", r, strerror(r));
         }
+
+        if ((r = crypt_keyslot_add_by_key(
+            cd,
+            CRYPT_ANY_SLOT,
+            NULL, /* volume_key */
+            0, /* volume_key_size */
+            pwd,
+            strlen(pwd),
+            0)) != 0) /* flags */
+        {
+            err("crypt_keyslot_add_by_key() failed: %d %s\n", r, strerror(r));
+        }
     }
     else if (strcmp(type, CRYPT_LUKS2) == 0)
     {
         struct crypt_pbkdf_type pbkdf =
         {
-            .type = "pbkdf2",
-            .hash = "sha256",
-            .iterations = 1000,
-            // .time_ms = 1,
-            // .flags = CRYPT_PBKDF_NO_BENCHMARK
+            .type = pbkdf_type,
+            .hash = hash,
+            .iterations = slot_iterations,
+            .time_ms = iter_time,
+            .max_memory_kb = pbkdf_memory,
+            .parallel_threads = pbkdf_parallel,
+            .flags = CRYPT_PBKDF_NO_BENCHMARK
         };
         struct crypt_params_luks2 params =
         {
@@ -517,42 +543,26 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
             CRYPT_LUKS2,
             cipher,
             cipher_mode,
-            NULL,
-            NULL,
-            key_size,
+            NULL, /* uuid */
+            NULL, /* volume_key */
+            key_size, /* volume_key_size */
             &params)) != 0)
         {
             err("crypt_format() failed: %d %s\n", r, strerror(r));
         }
-    }
 
-#if 0
-    if ((r = vic_luks_format(
-        dev,
-        version,
-        cipher,
-        uuid,
-        hash,
-        mk_iterations,
-        key,
-        key_size,
-        integrity)) != VIC_OK)
-    {
-        err("%s() failed: %s\n", argv[1], vic_result_string(r));
+        if ((r = crypt_keyslot_add_by_key(
+            cd,
+            CRYPT_ANY_SLOT,
+            NULL, /* volume_key */
+            0, /* volume_key_size */
+            pwd,
+            strlen(pwd),
+            0)) != 0) /* flags */
+        {
+            err("crypt_keyslot_add_by_key() failed: %d %s\n", r, strerror(r));
+        }
     }
-
-    if ((r = vic_luks_add_key_by_master_key(
-        dev,
-        keyslot_cipher,
-        slot_iterations,
-        pbkdf_memory,
-        key,
-        key_size,
-        pwd)) != VIC_OK)
-    {
-        err("%s() failed: %s\n", argv[1], vic_result_string(r));
-    }
-#endif
 
     crypt_free(cd);
 
@@ -610,11 +620,11 @@ static int luksAddKey(int argc, const char* argv[])
     uint64_t slot_iterations = 0;
     uint64_t pbkdf_memory = 0;
 
-    /* Get --keyslot-cipher option */
-    get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
-
     /* Get --pbkdf option */
     get_opt(&argc, argv, "--pbkdf", &pbkdf);
+
+    /* Get --keyslot-cipher option */
+    get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
 
     /* Get --slot-iterations option */
     get_opt_u64(&argc, argv, "--slot-iterations", &slot_iterations);
@@ -628,7 +638,9 @@ static int luksAddKey(int argc, const char* argv[])
         fprintf(stderr,
             "Usage: %s %s <luksfile> <pwd> <new-pwd>\n"
             "OPTIONS:\n"
+            "    --keyslot-cipher <type>\n"
             "    --slot-iterations <count>\n"
+            "    --pbkdf <type>\n"
             "    --pbkdf_memory <count>\n"
             "\n",
             argv[0],

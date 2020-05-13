@@ -188,7 +188,7 @@ int crypt_format(
     if (!type)
         type = CRYPT_LUKS1;
 
-    if (!_valid_cd(cd) || _valid_type(type) || !cipher_name || !cipher_mode)
+    if (!_valid_cd(cd) || !_valid_type(type) || !cipher_name || !cipher_mode)
         ERAISE(EINVAL);
 
     if (!_valid_key_size(volume_key_size))
@@ -275,14 +275,6 @@ int crypt_format(
                 hash = p->pbkdf->hash;
                 iterations = p->pbkdf->iterations;
 
-                if (p->pbkdf->time_ms ||
-                    p->pbkdf->max_memory_kb ||
-                    p->pbkdf->parallel_threads ||
-                    p->pbkdf->flags)
-                {
-                    ERAISE(ENOTSUP);
-                }
-
                 /* Save pbkdf for use in subsequent functions */
                 ECHECK(_set_pbkdf_type(cd, p->pbkdf));
             }
@@ -335,11 +327,9 @@ int crypt_keyslot_add_by_key(
         if (!_valid_cd(cd))
             ERAISE(EINVAL);
 
-        if (keyslot != CRYPT_ANY_SLOT &&
-            !(keyslot >= 0 && keyslot < LUKS2_NUM_KEYSLOTS))
-        {
-            ERAISE(EINVAL);
-        }
+        /* ATTN: keyslot selection not supported */
+        if (keyslot != CRYPT_ANY_SLOT)
+            ERAISE(ENOTSUP);
 
         /* If volume_key is null, use the one stored by crypt_format() */
         if (!volume_key)
@@ -351,14 +341,14 @@ int crypt_keyslot_add_by_key(
             volume_key_size = cd->luks2.volume_key_size;
         }
 
-        if (_valid_key_size(volume_key_size))
+        if (volume_key_size && !_valid_key_size(volume_key_size))
             ERAISE(EINVAL);
 
         if (!passphrase || !passphrase_size)
             ERAISE(EINVAL);
 
-        /* ATTN: no flags supported */
-        if (flags != 0)
+        /* ATTN: limited flag support */
+        if (flags != CRYPT_PBKDF_NO_BENCHMARK && flags != 0)
             ERAISE(EINVAL);
 
         if (!_valid_type(cd->type))

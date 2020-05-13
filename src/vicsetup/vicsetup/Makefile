@@ -22,6 +22,10 @@ OPTS += --keyfile KEY
 OPTS += --cipher "aes"
 OPTS += --cipher-mode "xts-plain64"
 OPTS += --luks2
+OPTS += --pbkdf argon2i
+OPTS += --pbkdf-memory 4096
+OPTS += --iter-time 5
+OPTS += --pbkdf-parallel 4
 
 xxx: $(PROGRAM)
 	head -c 64 /dev/urandom > KEY
