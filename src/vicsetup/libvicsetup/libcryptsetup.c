@@ -25,13 +25,51 @@ struct crypt_device
 
     struct
     {
-        char pbkdf_type[32];
-        char cipher[LUKS2_ENCRYPTION_SIZE];
         vic_key_t volume_key;
         size_t volume_key_size;
+        char cipher[LUKS2_ENCRYPTION_SIZE];
+
+        struct crypt_pbkdf_type pbkdf;
+        char pbkdf_type_buf[32];
+        char pbkdf_hash_buf[VIC_MAX_HASH_SIZE];
     }
     luks2;
 };
+
+static int _set_pbkdf_type(
+    struct crypt_device* cd,
+    const struct crypt_pbkdf_type* pbkdf)
+{
+    int ret = 0;
+
+    if (!cd || !pbkdf)
+        ERAISE(EINVAL);
+
+    cd->luks2.pbkdf = *pbkdf;
+
+    if (pbkdf->type)
+    {
+        const size_t n = sizeof(cd->luks2.pbkdf_type_buf);
+
+        if (vic_strlcpy(cd->luks2.pbkdf_type_buf, pbkdf->type, n) >= n)
+            ERAISE(EINVAL);
+
+        cd->luks2.pbkdf.type = cd->luks2.pbkdf_type_buf;
+    }
+
+    if (pbkdf->hash)
+    {
+        const size_t n = sizeof(cd->luks2.pbkdf_hash_buf);
+
+        if (vic_strlcpy(cd->luks2.pbkdf_hash_buf, pbkdf->hash, n) >= n)
+            ERAISE(EINVAL);
+
+        cd->luks2.pbkdf.hash = cd->luks2.pbkdf_hash_buf;
+    }
+
+done:
+    return ret;
+}
 
 static bool _valid_cd(const struct crypt_device* cd)
 {
@@ -245,9 +283,8 @@ int crypt_format(
                     ERAISE(ENOTSUP);
                 }
 
-                /* Save pbkdf type for later (used when adding keyslots) */
-                vic_strlcpy(cd->luks2.pbkdf_type, p->pbkdf->type,
-                    sizeof(cd->luks2.pbkdf_type));
+                /* Save pbkdf for use in subsequent functions */
+                ECHECK(_set_pbkdf_type(cd, p->pbkdf));
             }
         }
 
@@ -346,6 +383,20 @@ int crypt_keyslot_add_by_key(
     }
     else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
     {
+        vic_result_t r;
+
+        if ((r = luks2_add_key_by_master_key(
+            cd->vbd,
+            cd->luks2.cipher,
+            0, /* slot_iterations */
+            0, /* pbkdf_memory */ /* ATTN: use parameter passed to format */
+            (const vic_key_t*)volume_key,
+            volume_key_size,
+            passphrase,
+            passphrase_size)) != VIC_OK)
+        {
+            ERAISE(EINVAL);
+        }
     }
     else
     {

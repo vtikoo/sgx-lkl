@@ -2486,10 +2486,11 @@ done:
 static int _init_keyslot(
     luks2_keyslot_t* ks_out,
     const char* keyslot_cipher,
+    uint64_t key_size,
+    /* */
     const char* hash,
     uint64_t slot_iterations,
     uint64_t pbkdf_memory,
-    uint64_t key_size,
     size_t index)
 {
     int ret = -1;
@@ -3490,10 +3491,10 @@ vic_result_t luks2_add_key(
         if (_init_keyslot(
             &ext->keyslots[index],
             keyslot_cipher,
+            key_size,
             hash,
             slot_iterations,
             pbkdf_memory,
-            key_size,
             index) != 0)
         {
             RAISE(VIC_FAILED);
@@ -3571,10 +3572,10 @@ vic_result_t luks2_add_key_by_master_key(
         if (_init_keyslot(
             &ext->keyslots[index],
             keyslot_cipher,
+            master_key_bytes,
             hash,
             slot_iterations,
             pbkdf_memory,
-            master_key_bytes,
             index) != 0)
         {
             RAISE(VIC_FAILED);
