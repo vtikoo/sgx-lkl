@@ -17,18 +17,3 @@ DIRS += $(TOP)/libvicsetup
 
 include ../rules.mak
 -include depend.mak
-
-OPTS += --keyfile KEY
-OPTS += --cipher "aes"
-OPTS += --cipher-mode "xts-plain64"
-OPTS += --luks2
-OPTS += --pbkdf argon2i
-OPTS += --pbkdf-memory 4096
-OPTS += --iter-time 5
-OPTS += --pbkdf-parallel 4
-
-xxx: $(PROGRAM)
-	head -c 64 /dev/urandom > KEY
-	head -c 32M /dev/zero > LUKS
-	vicsetup cryptsetupLuksFormat $(OPTS) LUKS pass
-	vicsetup luksDump LUKS

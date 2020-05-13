@@ -57,7 +57,7 @@ luksOpen:
 luksClose:
 	vicsetup luksClose luksfile
 
-CLEAN += keyfile  luksfile
+CLEAN += keyfile luksfile
 
 DIRS += $(TOP)/vicsetup
 
