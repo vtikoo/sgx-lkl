@@ -384,12 +384,20 @@ int crypt_keyslot_add_by_key(
     else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
     {
         vic_result_t r;
+        vic_kdf_t kdf =
+        {
+            .hash = cd->luks2.pbkdf.hash,
+            .iterations = cd->luks2.pbkdf.iterations,
+            .time = cd->luks2.pbkdf.time_ms,
+            .memory = cd->luks2.pbkdf.max_memory_kb,
+            .cpus = cd->luks2.pbkdf.parallel_threads,
+        };
 
         if ((r = luks2_add_key_by_master_key(
             cd->vbd,
             cd->luks2.cipher,
-            0, /* slot_iterations */
-            0, /* pbkdf_memory */ /* ATTN: use parameter passed to format */
+            cd->luks2.pbkdf.type,
+            &kdf,
             (const vic_key_t*)volume_key,
             volume_key_size,
             passphrase,

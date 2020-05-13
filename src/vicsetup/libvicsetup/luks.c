@@ -292,8 +292,8 @@ done:
 vic_result_t vic_luks_add_key(
     vic_blockdev_t* device,
     const char* keyslot_cipher,
-    uint64_t slot_iterations,
-    uint64_t pbkdf_memory,
+    const char* kdf_type,
+    vic_kdf_t* kdf,
     const char* pwd,
     size_t pwd_size,
     const char* new_pwd,
@@ -310,13 +310,28 @@ vic_result_t vic_luks_add_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_add_key(device, slot_iterations, pwd, pwd_size, new_pwd,
+        if (kdf_type && strcmp(kdf_type, "pbkdf2") != 0)
+            RAISE(VIC_BAD_PARAMETER);
+
+        return luks1_add_key(
+            device,
+            kdf ? kdf->iterations : 0,
+            pwd,
+            pwd_size,
+            new_pwd,
             new_pwd_size);
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_add_key(device, keyslot_cipher, slot_iterations,
-            pbkdf_memory, pwd, pwd_size, new_pwd, new_pwd_size);
+        return luks2_add_key(
+            device,
+            keyslot_cipher,
+            kdf_type,
+            kdf,
+            pwd,
+            pwd_size,
+            new_pwd,
+            new_pwd_size);
     }
     else
     {
@@ -532,8 +547,8 @@ done:
 vic_result_t vic_luks_add_key_by_master_key(
     vic_blockdev_t* device,
     const char* keyslot_cipher,
-    uint64_t slot_iterations,
-    uint64_t pbkdf_memory,
+    const char* kdf_type,
+    vic_kdf_t* kdf,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -550,9 +565,12 @@ vic_result_t vic_luks_add_key_by_master_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
+        if (kdf_type && strcmp(kdf_type, "pbkdf2") != 0)
+            RAISE(VIC_BAD_PARAMETER);
+
         return luks1_add_key_by_master_key(
             device,
-            slot_iterations,
+            kdf ? kdf->iterations : 0,
             master_key,
             master_key_bytes,
             pwd,
@@ -563,8 +581,8 @@ vic_result_t vic_luks_add_key_by_master_key(
         return luks2_add_key_by_master_key(
             device,
             keyslot_cipher,
-            slot_iterations,
-            pbkdf_memory,
+            kdf_type,
+            kdf,
             master_key,
             master_key_bytes,
             pwd,

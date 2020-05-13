@@ -325,11 +325,17 @@ static int luksFormat(int argc, const char* argv[])
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }
 
+    vic_kdf_t kdf =
+    {
+        .iterations = slot_iterations,
+        .memory = pbkdf_memory,
+    };
+
     if ((r = vic_luks_add_key_by_master_key(
         dev,
         keyslot_cipher,
-        slot_iterations,
-        pbkdf_memory,
+        "pbkdf2",
+        &kdf,
         key,
         key_size,
         pwd,
@@ -600,11 +606,15 @@ static int luksAddKey(int argc, const char* argv[])
     vic_blockdev_t* dev;
     vic_result_t r;
     const char* keyslot_cipher = NULL;
+    const char* pbkdf = NULL;
     uint64_t slot_iterations = 0;
     uint64_t pbkdf_memory = 0;
 
     /* Get --keyslot-cipher option */
     get_opt(&argc, argv, "--keyslot-cipher", &keyslot_cipher);
+
+    /* Get --pbkdf option */
+    get_opt(&argc, argv, "--pbkdf", &pbkdf);
 
     /* Get --slot-iterations option */
     get_opt_u64(&argc, argv, "--slot-iterations", &slot_iterations);
@@ -633,8 +643,21 @@ static int luksAddKey(int argc, const char* argv[])
     if (vic_blockdev_open(luksfile, VIC_RDWR, 0, &dev) != VIC_OK)
         err("cannot open %s\n", luksfile);
 
-    if ((r = vic_luks_add_key(dev, keyslot_cipher, slot_iterations,
-        pbkdf_memory, pwd, strlen(pwd), new_pwd, strlen(new_pwd))) != VIC_OK)
+    vic_kdf_t kdf =
+    {
+        .iterations = slot_iterations,
+        .memory = pbkdf_memory,
+    };
+
+    if ((r = vic_luks_add_key(
+        dev,
+        keyslot_cipher,
+        pbkdf,
+        &kdf,
+        pwd,
+        strlen(pwd),
+        new_pwd,
+        strlen(new_pwd))) != VIC_OK)
     {
         err("%s() failed: %s\n", argv[1], vic_result_string(r));
     }

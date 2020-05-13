@@ -63,9 +63,12 @@ static uint8_t _magic_2nd[LUKS_MAGIC_SIZE] = LUKS_MAGIC_2ND;
 
 #define DEFAULT_HASH "sha256"
 
+#define DEFAULT_KDF_TYPE "argon2i"
+#define DEFAULT_KDF_HASH "sha256"
+#define DEFAULT_KDF_ITERATIONS 1000
 #define DEFAULT_KDF_TIME 4
-
-#define DEFAULT_PBKDF_MEMORY 744976
+#define DEFAULT_KDF_MEMORY 744976
+#define DEFAULT_KDF_CPUS 1
 
 #define DEFAULT_SEGMENT_OFFSET 4194304 /* power of two */
 
@@ -88,6 +91,7 @@ static uint8_t _magic_2nd[LUKS_MAGIC_SIZE] = LUKS_MAGIC_2ND;
 #define VIC_SHA512_SIZE 64
 #define VIC_RIPE160_SIZE 20
 #define VIC_MAX_HASH_SIZE 64
+
 
 #define LUKS_IV_SIZE 16
 
@@ -179,6 +183,33 @@ static const char* _get_encryption(luks2_ext_hdr_t* ext)
     return ext->segments[0].encryption;
 }
 
+static vic_kdf_t* _get_default_kdf(const char* kdf_type)
+{
+    if (strcmp(kdf_type, "pbkdf2") == 0)
+    {
+        static vic_kdf_t _pbkdf2 =
+        {
+            .hash = "sha256",
+            .iterations = DEFAULT_KDF_ITERATIONS,
+        };
+
+        return &_pbkdf2;
+    }
+    else if (strncmp(kdf_type, "argon2i", 7) == 0)
+    {
+        static vic_kdf_t _argon2i =
+        {
+            .time = DEFAULT_KDF_TIME,
+            .memory = DEFAULT_KDF_MEMORY,
+            .cpus = DEFAULT_KDF_CPUS,
+        };
+
+        return &_argon2i;
+    }
+
+    return NULL;
+}
+
 static bool _valid_pbkdf_type(const char* type)
 {
     if (strcmp(type, "pbkdf2") == 0 ||
@@ -224,7 +255,7 @@ static json_result_t _json_read_callback(
             if (data->depth == MAX_DEPTH)
             {
                 result = JSON_NESTING_OVERFLOW;
-                goto done;
+                GOTO(done);
             }
 
             data->depth++;
@@ -235,7 +266,7 @@ static json_result_t _json_read_callback(
             if (data->depth == 0)
             {
                 result = JSON_NESTING_UNDERFLOW;
-                goto done;
+                GOTO(done);
             }
 
             data->depth--;
@@ -260,7 +291,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -269,7 +300,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "keyslots.#.key_size", &i) == JSON_OK)
@@ -277,7 +308,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -288,7 +319,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -297,13 +328,13 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->kdf.type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (!_valid_pbkdf_type(ks->kdf.type))
                 {
                     result = JSON_UNSUPPORTED;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "keyslots.#.kdf.time", &i) == JSON_OK)
@@ -311,7 +342,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -322,7 +353,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -333,7 +364,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -342,7 +373,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->kdf.hash, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(
@@ -351,7 +382,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -362,7 +393,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -373,7 +404,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -388,14 +419,14 @@ static json_result_t _json_read_callback(
                 {
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
                 }
 
                 if (olen != LUKS_SALT_SIZE)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "keyslots.#.af.type", &i) == JSON_OK)
@@ -403,7 +434,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -412,7 +443,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->af.type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "keyslots.#.af.hash", &i) == JSON_OK)
@@ -420,7 +451,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -429,7 +460,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->af.hash, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "keyslots.#.af.stripes", &i) == JSON_OK)
@@ -437,7 +468,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -448,7 +479,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -457,7 +488,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->area.type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(
@@ -466,7 +497,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -475,7 +506,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(ks->area.encryption, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(
@@ -484,7 +515,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -496,7 +527,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -504,7 +535,7 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&ks->area.offset, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "keyslots.#.area.size", &i) == JSON_OK)
@@ -512,7 +543,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_KEYSLOTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_keyslot_t* ks = &data->hdr->keyslots[i];
@@ -520,7 +551,7 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&ks->area.size, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "segments.#.type", &i) == JSON_OK)
@@ -528,7 +559,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -537,7 +568,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(seg->type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "segments.#.offset", &i) == JSON_OK)
@@ -545,7 +576,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -553,7 +584,7 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&seg->offset, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "segments.#.iv_tweak", &i) == JSON_OK)
@@ -561,7 +592,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -569,7 +600,7 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&seg->iv_tweak, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "segments.#.size", &i) == JSON_OK)
@@ -577,7 +608,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -587,7 +618,7 @@ static json_result_t _json_read_callback(
                 else if (_strtou64(&seg->size, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "segments.#.encryption", &i) == JSON_OK)
@@ -595,7 +626,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -604,7 +635,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(seg->encryption, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(
@@ -613,7 +644,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -625,7 +656,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -634,7 +665,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(seg->integrity.type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser,
@@ -643,7 +674,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -653,13 +684,13 @@ static json_result_t _json_read_callback(
                 if (strcmp(un->string, "none") != 0)
                 {
                     result = JSON_UNSUPPORTED;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (vic_strlcpy(p, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser,
@@ -668,7 +699,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_SEGMENTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_segment_t* seg = &data->hdr->segments[i];
@@ -678,13 +709,13 @@ static json_result_t _json_read_callback(
                 if (strcmp(un->string, "none") != 0)
                 {
                     result = JSON_UNSUPPORTED;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (vic_strlcpy(p, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "digests.#.type", &i) == JSON_OK)
@@ -692,7 +723,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -701,13 +732,13 @@ static json_result_t _json_read_callback(
                 if (strcmp(un->string, "pbkdf2") != 0)
                 {
                     result = JSON_UNSUPPORTED;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (vic_strlcpy(digest->type, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "digests.#.keyslots", &i) == JSON_OK)
@@ -717,7 +748,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -725,13 +756,13 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&n, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (n >= VIC_COUNTOF(digest->keyslots))
                 {
                     result = JSON_OUT_OF_BOUNDS;
-                    goto done;
+                    GOTO(done);
                 }
 
                 digest->keyslots[n] = 1;
@@ -743,7 +774,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -751,13 +782,13 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&n, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (n >= VIC_COUNTOF(digest->segments))
                 {
                     result = JSON_OUT_OF_BOUNDS;
-                    goto done;
+                    GOTO(done);
                 }
 
                 digest->segments[n] = 1;
@@ -767,7 +798,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -776,7 +807,7 @@ static json_result_t _json_read_callback(
                 if (vic_strlcpy(digest->hash, un->string, n) >= n)
                 {
                     result = JSON_BUFFER_OVERFLOW;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "digests.#.iterations", &i) == JSON_OK)
@@ -784,7 +815,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_INTEGER || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -795,7 +826,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -810,14 +841,14 @@ static json_result_t _json_read_callback(
                 {
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
                 }
 
                 if (olen != LUKS_SALT_SIZE)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "digests.#.digest", &i) == JSON_OK)
@@ -825,7 +856,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_DIGESTS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_digest_t* digest = &data->hdr->digests[i];
@@ -839,13 +870,13 @@ static json_result_t _json_read_callback(
                     strlen(un->string)) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 if (olen != vic_hash_size(digest->hash))
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "config.json_size", &i) == JSON_OK)
@@ -853,7 +884,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_CONFIGS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_config_t* config = &data->hdr->config;
@@ -861,7 +892,7 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&config->json_size, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else if (json_match(parser, "config.keyslots_size", &i) == JSON_OK)
@@ -869,7 +900,7 @@ static json_result_t _json_read_callback(
                 if (type != JSON_TYPE_STRING || i >= LUKS2_NUM_CONFIGS)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
 
                 luks2_config_t* config = &data->hdr->config;
@@ -877,14 +908,14 @@ static json_result_t _json_read_callback(
                 if (_strtou64(&config->keyslots_size, un->string) != 0)
                 {
                     result = JSON_TYPE_MISMATCH;
-                    goto done;
+                    GOTO(done);
                 }
             }
             else
             {
                 json_dump_path(path, depth);
                 result = JSON_UNKNOWN_VALUE;
-                goto done;
+                GOTO(done);
             }
 
             break;
@@ -2487,10 +2518,12 @@ static int _init_keyslot(
     luks2_keyslot_t* ks_out,
     const char* keyslot_cipher,
     uint64_t key_size,
-    /* */
-    const char* hash,
-    uint64_t slot_iterations,
-    uint64_t pbkdf_memory,
+    const char* pbkdf_type,
+    const char* pbkdf2_hash,
+    uint64_t pbkdf2_iterations,
+    uint64_t argon2_time,
+    uint64_t argon2_memory,
+    uint64_t argon2_cpus,
     size_t index)
 {
     int ret = -1;
@@ -2498,10 +2531,16 @@ static int _init_keyslot(
     size_t area_offset = (DEFAULT_HDR_SIZE * 2) + (area_size * index);
     size_t hash_size;
 
-    if (!ks_out || !key_size)
+    if (!ks_out || !keyslot_cipher || !key_size)
         goto done;
 
-    if ((hash_size = vic_hash_size(hash)) == (size_t)-1)
+    if (!_valid_pbkdf_type(pbkdf_type))
+        goto done;
+
+    if (!pbkdf2_hash)
+        pbkdf2_hash = DEFAULT_KDF_HASH;
+
+    if ((hash_size = vic_hash_size(pbkdf2_hash)) == (size_t)-1)
         goto done;
 
     luks2_keyslot_t ks =
@@ -2510,14 +2549,14 @@ static int _init_keyslot(
         .key_size = key_size,
         .kdf =
         {
-            .type = "argon2i",
+            .type = "",
             .salt = { 0 },
             /* pbkdf2 */
             .hash = "",
-            .iterations = slot_iterations,
+            .iterations = 0,
             /* argon2 */
-            .time = DEFAULT_KDF_TIME,
-            .memory = pbkdf_memory,
+            .time = 0,
+            .memory = 0,
             .cpus = 0,
         },
         .af =
@@ -2535,7 +2574,25 @@ static int _init_keyslot(
         },
     };
 
-    vic_strlcpy(ks.af.hash, hash, sizeof(ks.af.hash));
+    if (STRLCPY(ks.kdf.type, pbkdf_type) != 0)
+        goto done;
+
+    if (strcmp(pbkdf_type, "pbkdf2") == 0)
+    {
+        if (STRLCPY(ks.kdf.hash, pbkdf2_hash) != 0)
+            goto done;
+
+        ks.kdf.iterations =
+            pbkdf2_iterations ? pbkdf2_iterations : DEFAULT_KDF_ITERATIONS;
+    }
+    else if (strncmp(pbkdf_type, "argon2i", 7) == 0)
+    {
+        ks.kdf.time = argon2_time ? argon2_time : DEFAULT_KDF_TIME;
+        ks.kdf.memory = argon2_memory ? argon2_memory : DEFAULT_KDF_MEMORY;
+        ks.kdf.cpus = argon2_cpus ? argon2_cpus : DEFAULT_KDF_CPUS;
+    }
+
+    vic_strlcpy(ks.af.hash, pbkdf2_hash, sizeof(ks.af.hash));
     vic_strlcpy(ks.area.encryption, keyslot_cipher, sizeof(ks.area.encryption));
 
     vic_luks_random(ks.kdf.salt, sizeof(ks.kdf.salt));
@@ -3444,8 +3501,8 @@ done:
 vic_result_t luks2_add_key(
     vic_blockdev_t* dev,
     const char* keyslot_cipher,
-    uint64_t slot_iterations,
-    uint64_t pbkdf_memory,
+    const char* kdf_type,
+    vic_kdf_t* kdf,
     const char* pwd,
     size_t pwd_size,
     const char* new_pwd,
@@ -3457,17 +3514,22 @@ vic_result_t luks2_add_key(
     size_t key_size;
     size_t index;
     void* data = NULL;
-    const char* hash;
 
     /* Check parameters */
     if (!_is_valid_device(dev) || !pwd || !new_pwd)
         RAISE(VIC_BAD_PARAMETER);
 
-    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
-        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+    /* Handle kdf */
+    {
+        if (!kdf_type)
+            kdf_type = DEFAULT_KDF_TYPE;
 
-    if (pbkdf_memory == 0)
-        pbkdf_memory = DEFAULT_PBKDF_MEMORY;
+        if (!_valid_pbkdf_type(kdf_type))
+            RAISE(VIC_BAD_PARAMETER);
+
+        if (!kdf)
+            kdf = _get_default_kdf(kdf_type);
+    }
 
     /* Read the LUKS2 header */
     if (luks2_read_hdr(dev, (luks2_hdr_t**)&ext) != 0)
@@ -3480,9 +3542,6 @@ vic_result_t luks2_add_key(
     if (!keyslot_cipher)
         keyslot_cipher = ext->keyslots[index].area.encryption;
 
-    /* Set the hash from the digest */
-    hash = ext->digests[0].hash;
-
     /* Add a new key slot */
     {
         if ((index = _find_free_keyslot(ext)) == (size_t)-1)
@@ -3492,9 +3551,12 @@ vic_result_t luks2_add_key(
             &ext->keyslots[index],
             keyslot_cipher,
             key_size,
-            hash,
-            slot_iterations,
-            pbkdf_memory,
+            kdf_type,
+            kdf->hash,
+            kdf->iterations,
+            kdf->time,
+            kdf->memory,
+            kdf->cpus,
             index) != 0)
         {
             RAISE(VIC_FAILED);
@@ -3534,8 +3596,8 @@ done:
 vic_result_t luks2_add_key_by_master_key(
     vic_blockdev_t* dev,
     const char* keyslot_cipher,
-    uint64_t slot_iterations,
-    uint64_t pbkdf_memory,
+    const char* kdf_type,
+    vic_kdf_t* kdf,
     const vic_key_t* master_key,
     size_t master_key_bytes,
     const char* pwd,
@@ -3545,24 +3607,26 @@ vic_result_t luks2_add_key_by_master_key(
     luks2_ext_hdr_t* ext = NULL;
     size_t index;
     void* data = NULL;
-    const char* hash;
 
     /* Check parameters */
     if (!_is_valid_device(dev) || !keyslot_cipher || !master_key || !pwd)
         RAISE(VIC_BAD_PARAMETER);
 
-    if (slot_iterations < LUKS_MIN_SLOT_ITERATIONS)
-        slot_iterations = LUKS_MIN_SLOT_ITERATIONS;
+    /* Handle kdf */
+    {
+        if (!kdf_type)
+            kdf_type = DEFAULT_KDF_TYPE;
 
-    if (pbkdf_memory == 0)
-        pbkdf_memory = DEFAULT_PBKDF_MEMORY;
+        if (!_valid_pbkdf_type(kdf_type))
+            RAISE(VIC_BAD_PARAMETER);
+
+        if (!kdf)
+            kdf = _get_default_kdf(kdf_type);
+    }
 
     /* Read the LUKS2 header */
     if (luks2_read_hdr(dev, (luks2_hdr_t**)&ext) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
-
-    /* Set the hash from the digest */
-    hash = ext->digests[0].hash;
 
     /* Add a new key slot */
     {
@@ -3573,9 +3637,12 @@ vic_result_t luks2_add_key_by_master_key(
             &ext->keyslots[index],
             keyslot_cipher,
             master_key_bytes,
-            hash,
-            slot_iterations,
-            pbkdf_memory,
+            kdf_type,
+            kdf->hash,
+            kdf->iterations,
+            kdf->time,
+            kdf->memory,
+            kdf->cpus,
             index) != 0)
         {
             RAISE(VIC_FAILED);
