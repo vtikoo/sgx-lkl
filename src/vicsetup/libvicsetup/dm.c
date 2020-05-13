@@ -11,7 +11,7 @@
 #include "integrity.h"
 #include "hexdump.h"
 
-#if 1
+#if 0
 #define TRACE_TARGET
 #endif
 
@@ -122,7 +122,7 @@ vic_result_t vic_dm_create_crypt(
         RAISE(VIC_FAILED);
 
 #ifdef TRACE_TARGET
-    printf("TARGET.CRYPT: start{%lu} size{%lu} target{%s} params{%s}\n",
+    printf("TARGET: start{%lu} size{%lu} target{%s} params{%s}\n",
         start, size, "crypt", params);
 #endif
 
@@ -259,7 +259,7 @@ vic_result_t vic_dm_create_integrity(
         RAISE(VIC_FAILED);
 
 #ifdef TRACE_TARGET
-    printf("TARGET.INTEGRITY: start{%lu} size{%lu} target{%s} params{%s}\n",
+    printf("TARGET: start{%lu} size{%lu} target{%s} params{%s}\n",
         start, size, "integrity", params);
 #endif
 
@@ -390,7 +390,7 @@ vic_result_t vic_dm_create_verity(
         RAISE(VIC_FAILED);
 
 #ifdef TRACE_TARGET
-    printf("TARGET.VERITY: start{%lu} size{%lu} target{%s} params{%s}\n",
+    printf("TARGET: start{%lu} size{%lu} target{%s} params{%s}\n",
         start, size, target, params);
 #endif
 
