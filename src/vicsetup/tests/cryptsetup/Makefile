@@ -36,7 +36,7 @@ format1: dirs
 	head -c $(KEYSIZE1) /dev/urandom > KEY
 	head -c 32M /dev/zero > LUKS
 	vicsetup cryptsetupLuksFormat $(FORMAT1_OPTS) LUKS pass
-	vicsetup luksDump LUKS > format1.out
+	vicsetup luksDump LUKS > /dev/null
 
 ##==============================================================================
 ##
@@ -59,15 +59,6 @@ format2: dirs
 
 ##==============================================================================
 ##
-## dump:
-##
-##==============================================================================
-
-dump:
-	vicsetup luksDump LUKS
-
-##==============================================================================
-##
 ## csformat1:
 ##
 ##==============================================================================
@@ -83,7 +74,7 @@ csformat1:
 	head -c 96 /dev/urandom > KEY
 	head -c 32M /dev/zero > LUKS
 	cryptsetup luksFormat $(CSFORMAT1_OPTS) LUKS
-	vicsetup luksDump LUKS > csformat1.out
+	vicsetup luksDump LUKS > /dev/null
 
 ##==============================================================================
 ##
