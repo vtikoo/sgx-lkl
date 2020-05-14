@@ -44,6 +44,11 @@ struct crypt_device
         luks2_hdr_t* hdr;
     }
     luks2;
+    struct
+    {
+        vic_verity_sb_t sb;
+    }
+    verity;
 };
 
 static int _set_pbkdf_type(
@@ -86,13 +91,29 @@ static bool _valid_cd(const struct crypt_device* cd)
     return cd && cd->magic == MAGIC;
 }
 
-static bool _valid_type(const char* type)
+static bool _is_luks1(const char* type)
 {
-    return
-        strcmp(type, CRYPT_LUKS1) == 0 ||
-        strcmp(type, CRYPT_LUKS2) == 0 ||
-        strcmp(type, CRYPT_VERITY) == 0 ||
-        strcmp(type, CRYPT_INTEGRITY) == 0;
+    return type && strcmp(type, CRYPT_LUKS1) == 0;
+}
+
+static bool _is_luks2(const char* type)
+{
+    return type && strcmp(type, CRYPT_LUKS2) == 0;
+}
+
+static bool _is_verity(const char* type)
+{
+    return type && strcmp(type, CRYPT_VERITY) == 0;
+}
+
+static bool _is_integrity(const char* type)
+{
+    return type && strcmp(type, CRYPT_INTEGRITY) == 0;
+}
+
+static bool _valid_type(const char* s)
+{
+    return _is_luks1(s) || _is_luks2(s) || _is_verity(s) || _is_integrity(s);
 }
 
 int crypt_init(struct crypt_device** cd_out, const char* device)
@@ -163,7 +184,7 @@ void crypt_free(struct crypt_device* cd)
         if (cd->bd)
             vic_blockdev_close(cd->bd);
 
-        if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+        if (_is_luks1(cd->type))
         {
             if (*cd->dm_name)
                 vic_luks_close(cd->dm_name);
@@ -171,7 +192,7 @@ void crypt_free(struct crypt_device* cd)
             if (cd->luks1.hdr)
                 free(cd->luks1.hdr);
         }
-        else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+        else if (_is_luks2(cd->type))
         {
             if (*cd->dm_name)
                 vic_luks_close(cd->dm_name);
@@ -372,7 +393,7 @@ int crypt_keyslot_add_by_key(
             ERAISE(EINVAL);
     }
 
-    if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+    if (_is_luks1(cd->type))
     {
         vic_result_t r;
 
@@ -387,7 +408,7 @@ int crypt_keyslot_add_by_key(
             ERAISE(EINVAL);
         }
     }
-    else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+    else if (_is_luks2(cd->type))
     {
         vic_result_t r;
         vic_kdf_t kdf =
@@ -478,6 +499,8 @@ int crypt_load(
         if (block_size != expected_block_size)
             ERAISE(ENOTSUP);
 
+        cd->verity.sb = sb;
+
         /* TODO: handle params here! */
     }
     else
@@ -512,7 +535,7 @@ int crypt_activate_by_passphrase(
     if (keyslot != CRYPT_ANY_SLOT)
         ERAISE(ENOTSUP);
 
-    if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+    if (_is_luks1(cd->type))
     {
         vic_key_t key;
         size_t key_size;
@@ -539,7 +562,7 @@ int crypt_activate_by_passphrase(
 
         ERAISE(ENOTSUP);
     }
-    else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+    else if (_is_luks2(cd->type))
     {
         vic_key_t key;
         size_t key_size;
@@ -566,7 +589,7 @@ int crypt_activate_by_passphrase(
 
         ERAISE(ENOTSUP);
     }
-    else if (strcmp(cd->type, CRYPT_VERITY) == 0)
+    else if (_is_verity(cd->type))
     {
         /* TODO: */
         ERAISE(ENOTSUP);
@@ -602,7 +625,7 @@ int crypt_activate_by_volume_key(
     if (*cd->dm_name != '\0')
         ERAISE(EINVAL);
 
-    if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+    if (_is_luks1(cd->type))
     {
         vic_key_t key;
         size_t key_size;
@@ -625,7 +648,7 @@ int crypt_activate_by_volume_key(
 
         ERAISE(ENOTSUP);
     }
-    else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+    else if (_is_luks2(cd->type))
     {
         vic_key_t key;
         size_t key_size;
@@ -648,7 +671,7 @@ int crypt_activate_by_volume_key(
 
         ERAISE(ENOTSUP);
     }
-    else if (strcmp(cd->type, CRYPT_VERITY) == 0)
+    else if (_is_verity(cd->type))
     {
         /* TODO: */
         ERAISE(ENOTSUP);
@@ -660,4 +683,50 @@ int crypt_activate_by_volume_key(
 
 done:
     return ret;
+}
+
+int crypt_get_volume_key_size(struct crypt_device *cd)
+{
+    int ret = 0;
+
+    if (!_valid_cd(cd))
+        goto done;
+
+    if (_is_luks1(cd->type))
+    {
+        if (cd->luks1.hdr)
+        {
+            ret = cd->luks1.hdr->key_bytes;
+            goto done;
+        }
+    }
+    else if (_is_luks2(cd->type))
+    {
+        const luks2_ext_hdr_t* ext = (luks2_ext_hdr_t*)cd->luks2.hdr;
+
+        if (ext)
+        {
+            ret = ext->keyslots[0].key_size;
+            goto done;
+        }
+    }
+    else if (_is_verity(cd->type))
+    {
+        size_t size;
+
+        if ((size = vic_hash_size(cd->verity.sb.algorithm)) != (size_t)-1)
+        {
+            ret = (int)size;
+            goto done;
+        }
+    }
+
+done:
+    return ret;
+}
+
+void crypt_set_debug_level(int level)
+{
+    (void)level;
+    /* TODO: implement */
 }

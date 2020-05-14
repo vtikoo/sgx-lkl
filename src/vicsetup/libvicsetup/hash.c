@@ -322,6 +322,8 @@ size_t vic_hash_size(const char* hash_spec)
         return VIC_SHA256_SIZE;
     else if (strcmp(hash_spec, VIC_HASH_SPEC_SHA512) == 0)
         return VIC_SHA512_SIZE;
+    else if (strcmp(hash_spec, VIC_HASH_SPEC_RIPEMD160) == 0)
+        return VIC_RIPE160_SIZE;
 
     return (size_t)-1;
 }
