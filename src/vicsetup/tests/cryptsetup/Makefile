@@ -4,7 +4,7 @@ export PATH+=:$(TOP)/vicsetup
 
 all:
 
-tests: dirs format format2
+tests: dirs format1 format2
 
 ##==============================================================================
 ##
@@ -62,15 +62,14 @@ dump:
 ##==============================================================================
 
 CSFORMAT1_OPTS += --type luks2
-#CSFORMAT1_OPTS += --master-key-file KEY
-#CSFORMAT1_OPTS += --key-size 512
+CSFORMAT1_OPTS += --master-key-file KEY
 CSFORMAT1_OPTS += --iter-time 8
 CSFORMAT1_OPTS += --pbkdf-memory 1024
 CSFORMAT1_OPTS += --pbkdf-parallel 2
 CSFORMAT1_OPTS += --integrity "hmac-sha256"
 
 csformat1:
-	head -c 64 /dev/urandom > KEY
+	head -c 96 /dev/urandom > KEY
 	head -c 32M /dev/zero > LUKS
 	cryptsetup luksFormat $(CSFORMAT1_OPTS) LUKS
 

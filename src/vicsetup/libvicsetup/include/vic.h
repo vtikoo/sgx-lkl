@@ -183,8 +183,8 @@ vic_result_t vic_blockdev_close(vic_blockdev_t* dev);
 
 typedef struct vic_key
 {
-    /* 512 bits */
-    uint8_t buf[64];
+    /* 1024 bits */
+    uint8_t buf[128];
 }
 vic_key_t;
 

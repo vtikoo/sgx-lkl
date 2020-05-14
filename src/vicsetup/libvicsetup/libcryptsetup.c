@@ -158,21 +158,6 @@ void crypt_free(struct crypt_device* cd)
     }
 }
 
-static bool _valid_key_size(size_t key_size)
-{
-    VIC_STATIC_ASSERT(sizeof(vic_key_t) == 64);
-
-    switch (key_size)
-    {
-        case 16:
-        case 32:
-        case 64:
-            return true;
-        default:
-            return false;
-    }
-}
-
 int crypt_format(
     struct crypt_device* cd,
     const char* type,
@@ -191,7 +176,7 @@ int crypt_format(
     if (!_valid_cd(cd) || !_valid_type(type) || !cipher_name || !cipher_mode)
         ERAISE(EINVAL);
 
-    if (!_valid_key_size(volume_key_size))
+    if (!volume_key_size)
         ERAISE(EINVAL);
 
     /* Generate a volume key if volume_key is null */
@@ -341,7 +326,7 @@ int crypt_keyslot_add_by_key(
             volume_key_size = cd->luks2.volume_key_size;
         }
 
-        if (volume_key_size && !_valid_key_size(volume_key_size))
+        if (volume_key_size && !volume_key_size)
             ERAISE(EINVAL);
 
         if (!passphrase || !passphrase_size)

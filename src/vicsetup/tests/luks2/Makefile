@@ -10,9 +10,6 @@ all:
 
 tests: dirs luksFormat luksChangeKey luksAddKey luksRemoveKey luksGetMasterKey luksOpen luksClose
 
-keyfile:
-	@ head -c 64 /dev/random > keyfile
-
 LUKSFORMAT_OPTS = --luks2
 LUKSFORMAT_OPTS += --uuid $(UUID)
 LUKSFORMAT_OPTS += --keyfile keyfile
@@ -20,7 +17,8 @@ LUKSFORMAT_OPTS += --mk-iterations 1000
 LUKSFORMAT_OPTS += --slot-iterations 1000
 LUKSFORMAT_OPTS += --pbkdf-memory 4096
 
-luksFormat: keyfile
+luksFormat:
+	@ head -c 64 /dev/random > keyfile
 	head -c $(SIZE) /dev/zero > luksfile
 	vicsetup luksFormat $(LUKSFORMAT_OPTS) luksfile pass1
 

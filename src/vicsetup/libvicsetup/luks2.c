@@ -2676,14 +2676,18 @@ static vic_result_t _initialize_hdr(
     /* hdr.keyslots[] */
     {
         const size_t hdr_sizes = 2 * p->phdr.hdr_size;
+#if 0
         size_t area_size = vic_round_up(DEFAULT_AF_STRIPES * key_size, 4096);
+#endif
 
         /* Calcualte the keyslots size */
         keyslots_size = OVERHEAD_BYTES - hdr_sizes;
 
+#if 0
         /* Verify that keyslots_size is big enough */
         if (keyslots_size < LUKS2_NUM_KEYSLOTS * area_size)
             RAISE(VIC_UNEXPECTED);
+#endif
     }
 
     /* hdr.segments[] */

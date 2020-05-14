@@ -13,12 +13,10 @@ INTEGRITY_OPTS += --keyfile keyfile
 
 tests: dirs integrity
 
-keyfile:
-	head -c 64 /dev/urandom > keyfile
-
 UUID=11e8a94c-938d-4869-b623-cc3cd5ce8fed
 
-integrity: keyfile
+integrity:
+	head -c 64 /dev/urandom > keyfile
 	head -c 32M /dev/zero > integrity
 	vicsetup luksFormat $(INTEGRITY_OPTS) integrity pass
 	vicsetup luksOpen integrity pass integrity
