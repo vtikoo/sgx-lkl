@@ -17,41 +17,33 @@
 
 struct crypt_device
 {
-    char type[16];
     uint32_t magic;
+    char type[16];
+    char dm_name[PATH_MAX];
     vic_blockdev_t* bd;
     char path[PATH_MAX];
     bool readonly;
 
-    struct
-    {
-        vic_key_t volume_key;
-        size_t volume_key_size;
-        char cipher[LUKS2_ENCRYPTION_SIZE];
-
-        struct crypt_pbkdf_type pbkdf;
-        char pbkdf_type_buf[32];
-        char pbkdf_hash_buf[VIC_MAX_HASH_SIZE];
-    }
-    luks2_format;
+    /* Cached volume key for LUKS1 and LUKS2 */
+    vic_key_t volume_key;
+    size_t volume_key_size;
 
     struct
     {
         luks1_hdr_t* hdr;
     }
-    luks1_load;
-
+    luks1;
     struct
     {
+        char cipher[LUKS2_ENCRYPTION_SIZE];
+
+        struct crypt_pbkdf_type pbkdf;
+        char pbkdf_type_buf[32];
+        char pbkdf_hash_buf[VIC_MAX_HASH_SIZE];
+
         luks2_hdr_t* hdr;
     }
-    luks2_load;
-
-    struct
-    {
-        vic_verity_sb_t sb;
-    }
-    verity_load;
+    luks2;
 };
 
 static int _set_pbkdf_type(
@@ -63,26 +55,26 @@ static int _set_pbkdf_type(
     if (!cd || !pbkdf)
         ERAISE(EINVAL);
 
-    cd->luks2_format.pbkdf = *pbkdf;
+    cd->luks2.pbkdf = *pbkdf;
 
     if (pbkdf->type)
     {
-        const size_t n = sizeof(cd->luks2_format.pbkdf_type_buf);
+        const size_t n = sizeof(cd->luks2.pbkdf_type_buf);
 
-        if (vic_strlcpy(cd->luks2_format.pbkdf_type_buf, pbkdf->type, n) >= n)
+        if (vic_strlcpy(cd->luks2.pbkdf_type_buf, pbkdf->type, n) >= n)
             ERAISE(EINVAL);
 
-        cd->luks2_format.pbkdf.type = cd->luks2_format.pbkdf_type_buf;
+        cd->luks2.pbkdf.type = cd->luks2.pbkdf_type_buf;
     }
 
     if (pbkdf->hash)
     {
-        const size_t n = sizeof(cd->luks2_format.pbkdf_hash_buf);
+        const size_t n = sizeof(cd->luks2.pbkdf_hash_buf);
 
-        if (vic_strlcpy(cd->luks2_format.pbkdf_hash_buf, pbkdf->hash, n) >= n)
+        if (vic_strlcpy(cd->luks2.pbkdf_hash_buf, pbkdf->hash, n) >= n)
             ERAISE(EINVAL);
 
-        cd->luks2_format.pbkdf.hash = cd->luks2_format.pbkdf_hash_buf;
+        cd->luks2.pbkdf.hash = cd->luks2.pbkdf_hash_buf;
     }
 
 done:
@@ -173,11 +165,19 @@ void crypt_free(struct crypt_device* cd)
 
         if (strcmp(cd->type, CRYPT_LUKS1) == 0)
         {
-            free(cd->luks1_load.hdr);
+            if (*cd->dm_name)
+                vic_luks_close(cd->dm_name);
+
+            if (cd->luks1.hdr)
+                free(cd->luks1.hdr);
         }
         else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
         {
-            free(cd->luks2_load.hdr);
+            if (*cd->dm_name)
+                vic_luks_close(cd->dm_name);
+
+            if (cd->luks2.hdr)
+                free(cd->luks2.hdr);
         }
 
         memset(cd, 0, sizeof(struct crypt_device));
@@ -209,15 +209,15 @@ int crypt_format(
     /* Cache the key or generated key (for use in subsequent functions) */
     if (volume_key)
     {
-        cd->luks2_format.volume_key_size = volume_key_size;
-        memcpy(&cd->luks2_format.volume_key, volume_key, volume_key_size);
+        cd->volume_key_size = volume_key_size;
+        memcpy(&cd->volume_key, volume_key, volume_key_size);
     }
     else
     {
         /* Save in crypt device for later (used when adding keyslots) */
-        vic_luks_random(&cd->luks2_format.volume_key, volume_key_size);
-        cd->luks2_format.volume_key_size = volume_key_size;
-        volume_key = (const char*)cd->luks2_format.volume_key.buf;
+        vic_luks_random(&cd->volume_key, volume_key_size);
+        cd->volume_key_size = volume_key_size;
+        volume_key = (const char*)cd->volume_key.buf;
     }
 
     ECHECK(_force_open_for_write(cd));
@@ -302,7 +302,7 @@ int crypt_format(
             ERAISE(EINVAL);
 
         /* Save the cipher for later (used when adding keyslots) */
-        vic_strlcpy(cd->luks2_format.cipher, cipher, sizeof(cd->luks2_format.cipher));
+        vic_strlcpy(cd->luks2.cipher, cipher, sizeof(cd->luks2.cipher));
 
         if ((r = luks2_format(
             cd->bd,
@@ -354,8 +354,8 @@ int crypt_keyslot_add_by_key(
             if (volume_key_size != 0)
                 ERAISE(EINVAL);
 
-            volume_key = (const char*)cd->luks2_format.volume_key.buf;
-            volume_key_size = cd->luks2_format.volume_key_size;
+            volume_key = (const char*)cd->volume_key.buf;
+            volume_key_size = cd->volume_key_size;
         }
 
         if (volume_key_size && !volume_key_size)
@@ -365,14 +365,13 @@ int crypt_keyslot_add_by_key(
             ERAISE(EINVAL);
 
         /* ATTN: limited flag support */
-        if (flags != CRYPT_PBKDF_NO_BENCHMARK && flags != 0)
+        if (flags & ~CRYPT_PBKDF_NO_BENCHMARK)
             ERAISE(EINVAL);
 
         if (!_valid_type(cd->type))
             ERAISE(EINVAL);
     }
 
-    /* Add the keyslot */
     if (strcmp(cd->type, CRYPT_LUKS1) == 0)
     {
         vic_result_t r;
@@ -393,17 +392,17 @@ int crypt_keyslot_add_by_key(
         vic_result_t r;
         vic_kdf_t kdf =
         {
-            .hash = cd->luks2_format.pbkdf.hash,
-            .iterations = cd->luks2_format.pbkdf.iterations,
-            .time = cd->luks2_format.pbkdf.time_ms,
-            .memory = cd->luks2_format.pbkdf.max_memory_kb,
-            .cpus = cd->luks2_format.pbkdf.parallel_threads,
+            .hash = cd->luks2.pbkdf.hash,
+            .iterations = cd->luks2.pbkdf.iterations,
+            .time = cd->luks2.pbkdf.time_ms,
+            .memory = cd->luks2.pbkdf.max_memory_kb,
+            .cpus = cd->luks2.pbkdf.parallel_threads,
         };
 
         if ((r = luks2_add_key_by_master_key(
             cd->bd,
-            cd->luks2_format.cipher,
-            cd->luks2_format.pbkdf.type,
+            cd->luks2.cipher,
+            cd->luks2.pbkdf.type,
             &kdf,
             (const vic_key_t*)volume_key,
             volume_key_size,
@@ -442,19 +441,19 @@ int crypt_load(
     {
         vic_strlcpy(cd->type, requested_type, sizeof(cd->type));
 
-        if (luks1_read_hdr(cd->bd, &cd->luks1_load.hdr) != VIC_OK)
+        if (luks1_read_hdr(cd->bd, &cd->luks1.hdr) != VIC_OK)
             ERAISE(EIO);
     }
     else if (strcmp(requested_type, CRYPT_LUKS2) == 0)
     {
         vic_strlcpy(cd->type, requested_type, sizeof(cd->type));
 
-        if (luks2_read_hdr(cd->bd, &cd->luks2_load.hdr) != VIC_OK)
+        if (luks2_read_hdr(cd->bd, &cd->luks2.hdr) != VIC_OK)
             ERAISE(EIO);
     }
     else if (strcmp(requested_type, CRYPT_VERITY) == 0)
     {
-        vic_verity_sb_t* sb = &cd->verity_load.sb;
+        vic_verity_sb_t sb;
         const size_t expected_block_size = 4096;
         size_t block_size;
 
@@ -463,13 +462,14 @@ int crypt_load(
         if (vic_blockdev_set_block_size(cd->bd, expected_block_size) != VIC_OK)
             ERAISE(EINVAL);
 
-        if (vic_verity_read_superblock(cd->bd, sb) != VIC_OK)
+        /* TODO: this must be executed on the hash device not data device */
+        if (vic_verity_read_superblock(cd->bd, &sb) != VIC_OK)
             ERAISE(EIO);
 
-        if (sb->data_block_size != expected_block_size)
+        if (sb.data_block_size != expected_block_size)
             ERAISE(ENOTSUP);
 
-        if (sb->hash_block_size != expected_block_size)
+        if (sb.hash_block_size != expected_block_size)
             ERAISE(ENOTSUP);
 
         if (vic_blockdev_get_block_size(cd->bd, &block_size) != VIC_OK)
@@ -478,9 +478,182 @@ int crypt_load(
         if (block_size != expected_block_size)
             ERAISE(ENOTSUP);
 
-        /* ATTN: handle params here! */
+        /* TODO: handle params here! */
     }
-    else if (strcmp(requested_type, CRYPT_INTEGRITY) == 0)
+    else
+    {
+        ERAISE(ENOTSUP);
+    }
+
+done:
+    return ret;
+}
+
+int crypt_activate_by_passphrase(
+    struct crypt_device* cd,
+    const char* name,
+    int keyslot,
+    const char* passphrase,
+    size_t passphrase_size,
+    uint32_t flags)
+{
+    int ret = 0;
+
+    if (!_valid_cd(cd) || !cd->bd || !name || !passphrase || !passphrase_size)
+        ERAISE(EINVAL);
+
+    if (*cd->type == '\0')
+        ERAISE(EINVAL);
+
+    /* If already open within /dev/mapper */
+    if (*cd->dm_name != '\0')
+        ERAISE(EINVAL);
+
+    if (keyslot != CRYPT_ANY_SLOT)
+        ERAISE(ENOTSUP);
+
+    if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+    {
+        vic_key_t key;
+        size_t key_size;
+
+        /* ATTN: only support read-only flag for now */
+        if (flags & ~CRYPT_ACTIVATE_READONLY)
+            ERAISE(EINVAL);
+
+        if (!(flags & CRYPT_ACTIVATE_READONLY))
+            ECHECK(_force_open_for_write(cd));
+
+        /* Use the passphrase to recover the master key */
+        if (luks1_recover_master_key(cd->bd, passphrase, passphrase_size,
+            &key, &key_size) != VIC_OK)
+        {
+            ERAISE(EIO);
+        }
+
+        /* Open the LUKS1 device */
+        if (luks1_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
+            ERAISE(EIO);
+
+        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
+
+        ERAISE(ENOTSUP);
+    }
+    else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+    {
+        vic_key_t key;
+        size_t key_size;
+
+        /* ATTN: only support read-only flag for now */
+        if (flags & ~CRYPT_ACTIVATE_READONLY)
+            ERAISE(EINVAL);
+
+        if (!(flags & CRYPT_ACTIVATE_READONLY))
+            ECHECK(_force_open_for_write(cd));
+
+        /* Use the passphrase to recover the master key */
+        if (luks2_recover_master_key(cd->bd, passphrase, passphrase_size,
+            &key, &key_size) != VIC_OK)
+        {
+            ERAISE(EIO);
+        }
+
+        /* Open the LUKS1 device */
+        if (luks2_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
+            ERAISE(EIO);
+
+        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
+
+        ERAISE(ENOTSUP);
+    }
+    else if (strcmp(cd->type, CRYPT_VERITY) == 0)
+    {
+        /* TODO: */
+        ERAISE(ENOTSUP);
+    }
+    else
+    {
+        ERAISE(ENOTSUP);
+    }
+
+done:
+    return ret;
+}
+
+int crypt_activate_by_volume_key(
+    struct crypt_device* cd,
+    const char* name,
+    const char* volume_key,
+    size_t volume_key_size,
+    uint32_t flags)
+{
+    int ret = 0;
+
+    if (!_valid_cd(cd) || !cd->bd || !name || !volume_key || !volume_key_size)
+        ERAISE(EINVAL);
+
+    if (volume_key_size > sizeof(vic_key_t))
+        ERAISE(EINVAL);
+
+    if (*cd->type == '\0')
+        ERAISE(EINVAL);
+
+    /* If already open within /dev/mapper */
+    if (*cd->dm_name != '\0')
+        ERAISE(EINVAL);
+
+    if (strcmp(cd->type, CRYPT_LUKS1) == 0)
+    {
+        vic_key_t key;
+        size_t key_size;
+
+        memcpy(&key, volume_key, volume_key_size);
+        key_size = volume_key_size;
+
+        /* ATTN: only support read-only flag for now */
+        if (flags & ~CRYPT_ACTIVATE_READONLY)
+            ERAISE(EINVAL);
+
+        if (!(flags & CRYPT_ACTIVATE_READONLY))
+            ECHECK(_force_open_for_write(cd));
+
+        /* Open the LUKS1 device */
+        if (luks1_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
+            ERAISE(EIO);
+
+        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
+
+        ERAISE(ENOTSUP);
+    }
+    else if (strcmp(cd->type, CRYPT_LUKS2) == 0)
+    {
+        vic_key_t key;
+        size_t key_size;
+
+        memcpy(&key, volume_key, volume_key_size);
+        key_size = volume_key_size;
+
+        /* ATTN: only support read-only flag for now */
+        if (flags & ~CRYPT_ACTIVATE_READONLY)
+            ERAISE(EINVAL);
+
+        if (!(flags & CRYPT_ACTIVATE_READONLY))
+            ECHECK(_force_open_for_write(cd));
+
+        /* Open the LUKS1 device */
+        if (luks2_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
+            ERAISE(EIO);
+
+        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
+
+        ERAISE(ENOTSUP);
+    }
+    else if (strcmp(cd->type, CRYPT_VERITY) == 0)
+    {
+        /* TODO: */
+        ERAISE(ENOTSUP);
+    }
+    else
     {
         ERAISE(ENOTSUP);
     }
