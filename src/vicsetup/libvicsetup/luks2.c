@@ -2518,6 +2518,7 @@ static int _init_keyslot(
     luks2_keyslot_t* ks_out,
     const char* keyslot_cipher,
     uint64_t key_size,
+    uint64_t area_key_size,
     const char* pbkdf_type,
     const char* pbkdf2_hash,
     uint64_t pbkdf2_iterations,
@@ -2568,7 +2569,7 @@ static int _init_keyslot(
         .area =
         {
             .type = "raw",
-            .key_size = key_size,
+            .key_size = area_key_size,
             .offset = area_offset,
             .size = area_size,
         },
@@ -2855,7 +2856,7 @@ static vic_result_t _generate_key_material(
             ks->kdf.iterations,
             ks->kdf.hash,
             &pbkdf2_key,
-            ks->key_size) != 0)
+            ks->area.key_size) != 0)
         {
             RAISE(VIC_PBKDF2_FAILED);
         }
@@ -2871,7 +2872,7 @@ static vic_result_t _generate_key_material(
             ks->kdf.memory,
             ks->kdf.cpus,
             &pbkdf2_key,
-            ks->key_size) != 0)
+            ks->area.key_size) != 0)
         {
             RAISE(VIC_ARGON2I_FAILED);
         }
@@ -2887,7 +2888,7 @@ static vic_result_t _generate_key_material(
             ks->kdf.memory,
             ks->kdf.cpus,
             &pbkdf2_key,
-            ks->key_size) != 0)
+            ks->area.key_size) != 0)
         {
             RAISE(VIC_ARGON2I_FAILED);
         }
@@ -3520,6 +3521,7 @@ vic_result_t luks2_add_key(
     size_t key_size;
     size_t index;
     void* data = NULL;
+    size_t area_key_size;
 
     /* Check parameters */
     if (!_is_valid_device(dev) || !pwd || !new_pwd)
@@ -3545,6 +3547,10 @@ vic_result_t luks2_add_key(
     CHECK(_find_key_by_pwd(dev, ext, pwd, pwd_size, &key, &key_size,
         &index));
 
+    /* The area key excludes the integrity key suffix (if any) */
+    area_key_size = key_size - vic_integrity_key_size_from_str(
+        ext->segments[0].integrity.type);
+
     if (!keyslot_cipher)
         keyslot_cipher = ext->keyslots[index].area.encryption;
 
@@ -3557,6 +3563,7 @@ vic_result_t luks2_add_key(
             &ext->keyslots[index],
             keyslot_cipher,
             key_size,
+            area_key_size,
             kdf_type,
             kdf->hash,
             kdf->iterations,
@@ -3613,6 +3620,7 @@ vic_result_t luks2_add_key_by_master_key(
     luks2_ext_hdr_t* ext = NULL;
     size_t index;
     void* data = NULL;
+    size_t area_key_size;
 
     /* Check parameters */
     if (!_is_valid_device(dev) || !keyslot_cipher || !master_key || !pwd)
@@ -3634,6 +3642,10 @@ vic_result_t luks2_add_key_by_master_key(
     if (luks2_read_hdr(dev, (luks2_hdr_t**)&ext) != 0)
         RAISE(VIC_HEADER_READ_FAILED);
 
+    /* The area key excludes the integrity key suffix (if any) */
+    area_key_size = master_key_bytes - vic_integrity_key_size_from_str(
+        ext->segments[0].integrity.type);
+
     /* Add a new key slot */
     {
         if ((index = _find_free_keyslot(ext)) == (size_t)-1)
@@ -3643,6 +3655,7 @@ vic_result_t luks2_add_key_by_master_key(
             &ext->keyslots[index],
             keyslot_cipher,
             master_key_bytes,
+            area_key_size,
             kdf_type,
             kdf->hash,
             kdf->iterations,

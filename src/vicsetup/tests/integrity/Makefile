@@ -6,17 +6,19 @@ export PATH+=:$(TOP)/vicsetup
 
 all:
 
-INTEGRITY_OPTS += --luks2
-INTEGRITY_OPTS += --uuid $(UUID)
-INTEGRITY_OPTS += --integrity "hmac(sha256)"
-INTEGRITY_OPTS += --keyfile keyfile
-
-tests: dirs integrity
+tests: dirs
+	$(MAKE) KEYSIZE=128 INTEGRITY="hmac(sha512)" integrity
+	$(MAKE) KEYSIZE=96 INTEGRITY="hmac(sha256)" integrity
+	$(MAKE) KEYSIZE=64 INTEGRITY="hmac(sha256)" integrity
 
 UUID=11e8a94c-938d-4869-b623-cc3cd5ce8fed
+INTEGRITY_OPTS += --luks2
+INTEGRITY_OPTS += --uuid $(UUID)
+INTEGRITY_OPTS += --integrity "$(INTEGRITY)"
+INTEGRITY_OPTS += --keyfile keyfile
 
 integrity:
-	head -c 64 /dev/urandom > keyfile
+	head -c $(KEYSIZE) /dev/urandom > keyfile
 	head -c 32M /dev/zero > integrity
 	vicsetup luksFormat $(INTEGRITY_OPTS) integrity pass
 	vicsetup luksOpen integrity pass integrity

@@ -161,27 +161,6 @@ size_t vic_integrity_tag_size_from_str(const char* integrity)
     return (size_t)-1;
 }
 
-size_t vic_integrity_key_size(vic_integrity_t integrity)
-{
-    switch(integrity)
-    {
-        case VIC_INTEGRITY_NONE:
-            return 0;
-        case VIC_INTEGRITY_HMAC_AEAD:
-            return 0;
-        case VIC_INTEGRITY_HMAC_SHA256:
-            return 32;
-        case VIC_INTEGRITY_HMAC_SHA512:
-            return 64;
-        case VIC_INTEGRITY_CMAC_AES:
-            return 0;
-        case VIC_INTEGRITY_POLY1305:
-            return 0;
-    }
-
-    return 0;
-}
-
 size_t vic_integrity_key_size_from_str(const char* integrity)
 {
     if (!integrity)

@@ -11,7 +11,7 @@
 #include "integrity.h"
 #include "hexdump.h"
 
-#if 1
+#if 0
 #define TRACE_TARGET
 #endif
 

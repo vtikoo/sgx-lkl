@@ -360,8 +360,8 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     const char* uuid = NULL;
     const char* hash = NULL;
     const char* keyfile = NULL;
-    const vic_key_t* key = NULL;
     vic_key_t key_buf;
+    const vic_key_t* key = NULL;
     size_t key_size = 0;
     const char* integrity = NULL;
     uint64_t mk_iterations = 0;
@@ -464,13 +464,14 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     if (!keyslot_cipher)
         keyslot_cipher = LUKS_DEFAULT_CIPHER;
 
-    /* Randomly generate a new key */
+#if 0
     if (!key)
     {
         key = &key_buf;
         vic_luks_random(&key_buf, sizeof(key_buf));
         key_size = sizeof(key_buf);
     }
+#endif
 
     if (!type || strcmp(type, CRYPT_LUKS1) == 0)
     {
@@ -488,7 +489,7 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
             cipher,
             cipher_mode,
             NULL,
-            NULL,
+            (const char*)key,
             key_size,
             &params)) != 0)
         {
@@ -532,7 +533,7 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
             cipher,
             cipher_mode,
             NULL, /* uuid */
-            NULL, /* volume_key */
+            (const char*)key, /* volume_key */
             key_size, /* volume_key_size */
             &params)) != 0)
         {

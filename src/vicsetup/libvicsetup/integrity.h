@@ -58,8 +58,6 @@ vic_integrity_t vic_integrity_enum(const char* str);
 
 size_t vic_integrity_tag_size_from_str(const char* integrity);
 
-size_t vic_integrity_key_size(vic_integrity_t integrity);
-
 size_t vic_integrity_key_size_from_str(const char* integrity);
 
 #endif /* _VIC_INTEGRITY_H */

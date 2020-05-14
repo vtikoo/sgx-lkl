@@ -124,7 +124,7 @@ done:
     return ret;
 }
 
-static int _reopen_for_write(struct crypt_device* cd)
+static int _force_open_for_write(struct crypt_device* cd)
 {
     int ret = 0;
 
@@ -176,11 +176,16 @@ int crypt_format(
     if (!_valid_cd(cd) || !_valid_type(type) || !cipher_name || !cipher_mode)
         ERAISE(EINVAL);
 
-    if (!volume_key_size)
+    if (!volume_key_size || volume_key_size > sizeof(vic_key_t))
         ERAISE(EINVAL);
 
-    /* Generate a volume key if volume_key is null */
-    if (!volume_key)
+    /* Cache the key or generated key (for use in subsequent functions) */
+    if (volume_key)
+    {
+        cd->luks2.volume_key_size = volume_key_size;
+        memcpy(&cd->luks2.volume_key, volume_key, volume_key_size);
+    }
+    else
     {
         /* Save in crypt device for later (used when adding keyslots) */
         vic_luks_random(&cd->luks2.volume_key, volume_key_size);
@@ -188,7 +193,7 @@ int crypt_format(
         volume_key = (const char*)cd->luks2.volume_key.buf;
     }
 
-    ECHECK(_reopen_for_write(cd));
+    ECHECK(_force_open_for_write(cd));
 
     /* Save the type for use in subsequent calls */
     vic_strlcpy(cd->type, type, sizeof(cd->type));

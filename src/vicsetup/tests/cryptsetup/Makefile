@@ -1,5 +1,10 @@
 include ../../defs.mak
 
+.PHONY: format1
+.PHONY: format2
+.PHONY: csformat1
+.PHONY: csformat2
+
 export PATH+=:$(TOP)/vicsetup
 
 all:
@@ -12,6 +17,11 @@ tests: dirs format1 format2
 ##
 ##==============================================================================
 
+#KEYSIZE1=64
+#INTEGRITY1="hmac(sha256)"
+KEYSIZE1=96
+INTEGRITY1="hmac(sha256)"
+
 FORMAT1_OPTS += --keyfile KEY
 FORMAT1_OPTS += --cipher "aes"
 FORMAT1_OPTS += --cipher-mode "xts-plain64"
@@ -20,12 +30,13 @@ FORMAT1_OPTS += --pbkdf argon2i
 FORMAT1_OPTS += --iter-time 5
 FORMAT1_OPTS += --pbkdf-memory 4096
 FORMAT1_OPTS += --pbkdf-parallel 4
-FORMAT1_OPTS += --integrity "hmac(sha256)"
+FORMAT1_OPTS += --integrity $(INTEGRITY1)
 
 format1: dirs
-	head -c 64 /dev/urandom > KEY
+	head -c $(KEYSIZE1) /dev/urandom > KEY
 	head -c 32M /dev/zero > LUKS
 	vicsetup cryptsetupLuksFormat $(FORMAT1_OPTS) LUKS pass
+	vicsetup luksDump LUKS > format1.out
 
 ##==============================================================================
 ##
@@ -72,6 +83,7 @@ csformat1:
 	head -c 96 /dev/urandom > KEY
 	head -c 32M /dev/zero > LUKS
 	cryptsetup luksFormat $(CSFORMAT1_OPTS) LUKS
+	vicsetup luksDump LUKS > csformat1.out
 
 ##==============================================================================
 ##
@@ -94,6 +106,15 @@ csformat2:
 
 ##==============================================================================
 ##
+## csdump:
+##
+##==============================================================================
+
+csdump:
+	cryptsetup luksDump --dump-master-key LUKS
+
+##==============================================================================
+##
 ## standard rules:
 ##
 ##==============================================================================
@@ -103,3 +124,6 @@ CLEAN += KEY LUKS
 DIRS += $(TOP)/vicsetup
 
 include ../../rules.mak
+
+diff:
+	diff format1.out csformat1.out
