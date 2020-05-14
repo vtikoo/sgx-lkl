@@ -1590,10 +1590,10 @@ int luks2_dump_hdr(const luks2_hdr_t* hdr)
                 GOTO(done);
         }
 
-    #if 0
+#if 0
         printf("%.*s\n", (int)ext->json_size, ext->json_data);
         json_print(stdout, ext->json_data, ext->json_size);
-    #endif
+#endif
 
         /* Dump the JSON objects */
         {
@@ -2684,6 +2684,7 @@ static vic_result_t _initialize_hdr(
         /* Calcualte the keyslots size */
         keyslots_size = OVERHEAD_BYTES - hdr_sizes;
 
+/* ATTN: tests this */
 #if 0
         /* Verify that keyslots_size is big enough */
         if (keyslots_size < LUKS2_NUM_KEYSLOTS * area_size)

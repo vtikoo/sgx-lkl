@@ -378,7 +378,7 @@ done:
     return result;
 }
 
-static vic_result_t _load_super_block(
+vic_result_t vic_verity_read_superblock(
     vic_blockdev_t* dev,
     vic_verity_sb_t* sb)
 {
@@ -430,7 +430,7 @@ vic_result_t vic_verity_open(
 
     CHECK(vic_blockdev_get_byte_size(data_dev, &data_dev_size));
 
-    CHECK(_load_super_block(hash_dev, &sb));
+    CHECK(vic_verity_read_superblock(hash_dev, &sb));
 
     num_blocks = data_dev_size / sb.data_block_size;
 
@@ -471,7 +471,7 @@ vic_result_t vic_verity_dump(vic_blockdev_t* hash_dev)
     if (!_is_valid_device(hash_dev))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
-    CHECK(_load_super_block(hash_dev, &sb));
+    CHECK(vic_verity_read_superblock(hash_dev, &sb));
 
     vic_verity_dump_sb(&sb);
 
