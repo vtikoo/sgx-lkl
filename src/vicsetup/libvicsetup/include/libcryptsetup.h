@@ -94,7 +94,7 @@ struct crypt_params_luks2
 {
     const struct crypt_pbkdf_type* pbkdf;
     const char* integrity;
-    const struct crypt_params_integrity* integrity_params;
+    const struct crypt_params_integrity* integrity_params; // unsupported
     size_t data_alignment;
     const char* data_device;
     uint32_t sector_size;
