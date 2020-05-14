@@ -3,6 +3,7 @@
 #include <libdevmapper.h>
 #include <limits.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "vic.h"
 #include "raise.h"
@@ -148,36 +149,6 @@ done:
 
     if (hexkey)
         free(hexkey);
-
-    if (dmt)
-    {
-        dm_task_destroy(dmt);
-        dm_task_update_nodes();
-    }
-
-    return result;
-}
-
-vic_result_t vic_dm_remove(const char* name)
-{
-    vic_result_t result = VIC_UNEXPECTED;
-    struct dm_task* dmt = NULL;
-
-    if (!name)
-        RAISE(VIC_BAD_PARAMETER);
-
-    if (!(dmt = dm_task_create(DM_DEVICE_REMOVE)))
-        RAISE(VIC_FAILED);
-
-    if (!dm_task_set_name(dmt, name))
-        RAISE(VIC_FAILED);
-
-    if (!dm_task_run(dmt))
-        RAISE(VIC_FAILED);
-
-    result = VIC_OK;
-
-done:
 
     if (dmt)
     {
@@ -419,6 +390,50 @@ done:
 
     if (salt_ascii)
         free(salt_ascii);
+
+    if (dmt)
+    {
+        dm_task_destroy(dmt);
+        dm_task_update_nodes();
+    }
+
+    return result;
+}
+
+vic_result_t vic_dm_remove(const char* name)
+{
+    vic_result_t result = VIC_UNEXPECTED;
+    struct dm_task* dmt = NULL;
+    const size_t max_retries = 10;
+
+    if (!name)
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (!(dmt = dm_task_create(DM_DEVICE_REMOVE)))
+        RAISE(VIC_FAILED);
+
+    if (!dm_task_set_name(dmt, name))
+        RAISE(VIC_FAILED);
+
+    /* Wait until the device is not busy (wait 1 second at most) */
+    for (size_t i = 0; i < max_retries; i++)
+    {
+        if (dm_task_run(dmt))
+        {
+            struct timespec req;
+            const uint64_t second = 1000000000;
+
+            /* Sleep for 1/10th of a second */
+            req.tv_sec = 0;
+            req.tv_nsec = second / 10;
+            nanosleep(&req, NULL);
+            break;
+        }
+    }
+
+    result = VIC_OK;
+
+done:
 
     if (dmt)
     {

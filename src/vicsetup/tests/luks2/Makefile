@@ -18,7 +18,7 @@ LUKSFORMAT_OPTS += --slot-iterations 1000
 LUKSFORMAT_OPTS += --pbkdf-memory 4096
 
 luksFormat:
-	@ head -c 64 /dev/random > keyfile
+	@ head -c 64 /dev/urandom > keyfile
 	head -c $(SIZE) /dev/zero > luksfile
 	vicsetup luksFormat $(LUKSFORMAT_OPTS) luksfile pass1
 
