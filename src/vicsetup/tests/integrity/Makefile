@@ -11,7 +11,7 @@ tests: dirs
 	$(MAKE) KEYSIZE=96 INTEGRITY="hmac(sha256)" integrity
 	$(MAKE) KEYSIZE=64 INTEGRITY="hmac(sha256)" integrity
 
-UUID=11e8a94c-938d-4869-b623-cc3cd5ce8fed
+UUID=90faa067-e33f-464a-98ab-86a5fd5e56e4
 INTEGRITY_OPTS += --luks2
 INTEGRITY_OPTS += --uuid $(UUID)
 INTEGRITY_OPTS += --integrity "$(INTEGRITY)"

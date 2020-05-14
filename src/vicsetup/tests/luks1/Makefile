@@ -4,7 +4,7 @@ export PATH+=:$(TOP)/vicsetup
 
 SIZE=32M
 
-UUID=11e8a94c-938d-4869-b623-cc3cd5ce8fed
+UUID=86783a38-07fc-4235-bf45-36fd3982be5e
 
 all:
 

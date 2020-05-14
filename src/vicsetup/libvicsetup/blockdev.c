@@ -40,6 +40,21 @@ static bool _valid_blockdev(const blockdev_t* dev)
     return dev && dev->magic == MAGIC;
 }
 
+/* Check that device size is a multiple of the block size */
+static vic_result_t _check_block_multiple(blockdev_t* dev, size_t block_size)
+{
+    vic_result_t result = VIC_OK;
+    size_t byte_size;
+
+    CHECK(vic_blockdev_get_byte_size(&dev->base, &byte_size));
+
+    if (byte_size % block_size)
+        RAISE(VIC_NOT_BLOCK_MULTIPLE);
+
+done:
+    return result;
+}
+
 static vic_result_t _bd_get_path(
     const vic_blockdev_t* dev_,
     char path[PATH_MAX])
@@ -87,12 +102,17 @@ static vic_result_t _bd_set_block_size(
 {
     vic_result_t result = VIC_UNEXPECTED;
     blockdev_t* dev = (blockdev_t*)dev_;
+    size_t byte_size;
 
     if (!_valid_blockdev(dev))
         RAISE(VIC_BAD_PARAMETER);
 
     if (!block_size || !_is_power_of_two(block_size))
         RAISE(VIC_BAD_PARAMETER);
+
+    CHECK(vic_blockdev_get_byte_size(dev_, &byte_size));
+
+    CHECK(_check_block_multiple(dev, block_size));
 
     dev->block_size = block_size;
     result = VIC_OK;
@@ -315,15 +335,7 @@ vic_result_t vic_blockdev_open(
     dev->base.bd_close = _bd_close;
     dev->block_size = block_size;
 
-    /* Check that the device size is a multiple of the block size */
-    {
-        size_t byte_size;
-
-        CHECK(vic_blockdev_get_byte_size(&dev->base, &byte_size));
-
-        if (byte_size % block_size)
-            RAISE(VIC_NOT_BLOCK_MULTIPLE);
-    }
+    CHECK(_check_block_multiple(dev, block_size));
 
     *dev_out = &dev->base;
     dev = NULL;

@@ -460,6 +460,9 @@ int crypt_load(
 
         vic_strlcpy(cd->type, requested_type, sizeof(cd->type));
 
+        if (vic_blockdev_set_block_size(cd->bd, expected_block_size) != VIC_OK)
+            ERAISE(EINVAL);
+
         if (vic_verity_read_superblock(cd->bd, sb) != VIC_OK)
             ERAISE(EIO);
 
