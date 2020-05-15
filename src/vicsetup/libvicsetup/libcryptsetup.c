@@ -447,6 +447,7 @@ static int _crypt_load_verity(
     /* ATTN: block size hardcoded for 4096 for now */
     const size_t BLOCK_SIZE = 4096;
     vic_blockdev_t* hbd = NULL;
+    vic_verity_sb_t sb;
 
     if (!p || !p->data_device || !p->hash_device)
         ERAISE(EINVAL);
@@ -454,35 +455,42 @@ static int _crypt_load_verity(
     if (p->fec_device)
         ERAISE(ENOTSUP);
 
+    if (p->data_block_size && p->data_block_size != BLOCK_SIZE)
+        ERAISE(EINVAL);
+
+    if (p->hash_block_size && p->hash_block_size != BLOCK_SIZE)
+        ERAISE(EINVAL);
+
     /* Handle the data device */
     {
-        size_t block_size;
-
         if (strcmp(p->data_device, cd->path) != 0)
             ERAISE(EINVAL);
 
         if (vic_blockdev_set_block_size(cd->bd, BLOCK_SIZE) != VIC_OK)
             ERAISE(EINVAL);
 
-        if (vic_blockdev_get_block_size(cd->bd, &block_size) != VIC_OK)
-            ERAISE(EIO);
+        if (p->data_size)
+        {
+            const size_t size = p->data_size * BLOCK_SIZE;
 
-        if (p->data_block_size && p->data_block_size != block_size)
-            ERAISE(EINVAL);
+            if (vic_blockdev_set_size(cd->bd, size) != VIC_OK)
+                ERAISE(EIO);
+        }
     }
 
     /* Handle the hash device */
     {
-        vic_verity_sb_t sb;
-
         if (vic_blockdev_open(p->hash_device, VIC_RDONLY, 0, &hbd) != VIC_OK)
             ERAISE(ENOENT);
 
         if (vic_blockdev_set_block_size(hbd, BLOCK_SIZE) != VIC_OK)
             ERAISE(EINVAL);
 
-        if (vic_blockdev_set_offset(hbd, p->hash_area_offset) != VIC_OK)
-            ERAISE(EINVAL);
+        if (p->hash_area_offset)
+        {
+            if (vic_blockdev_set_offset(hbd, p->hash_area_offset) != VIC_OK)
+                ERAISE(EINVAL);
+        }
 
         if (vic_verity_read_superblock(hbd, &sb) != VIC_OK)
             ERAISE(EIO);
@@ -496,22 +504,7 @@ static int _crypt_load_verity(
         if (p->hash_block_size && p->hash_block_size != sb.hash_block_size)
             ERAISE(EINVAL);
 
-        if (p->data_block_size && p->data_block_size != sb.data_block_size)
-            ERAISE(EINVAL);
-
         cd->verity.sb = sb;
-    }
-
-    /* If the data-device and hash-device and the same file */
-    {
-        bool same;
-        ECHECK(vic_blockdev_same(cd->bd, hbd, &same));
-
-        if (same)
-        {
-            if (p->hash_area_offset == 0)
-                ERAISE(EINVAL);
-        }
     }
 
     cd->hbd = hbd;
@@ -725,8 +718,18 @@ int crypt_activate_by_volume_key(
     }
     else if (_is_verity(cd->type))
     {
-        /* TODO: */
-        ERAISE(ENOTSUP);
+        if (!cd->hbd)
+            ERAISE(EINVAL);
+
+        if (vic_verity_open(
+            name,
+            cd->bd,
+            cd->hbd,
+            volume_key, /* root hash */
+            volume_key_size) != VIC_OK)
+        {
+            ERAISE(EIO);
+        }
     }
     else
     {

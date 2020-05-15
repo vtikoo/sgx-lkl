@@ -558,6 +558,63 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     return 0;
 }
 
+static int veritysetupOpen(int argc, const char* argv[])
+{
+    struct crypt_device* cd;
+    uint8_t* root_hash;
+    size_t root_hash_size;
+
+    /* Check usage */
+    if (argc != 6)
+    {
+        fprintf(stderr,
+            "Usage: %s %s <datafile> <name> <hashfile> <root_hash>\n"
+            "\n",
+            argv[0],
+            argv[1]);
+        exit(1);
+    }
+
+    const char* datafile_opt = argv[2];
+    const char* name_opt = argv[3];
+    const char* hashfile_opt = argv[4];
+    const char* root_hash_opt = argv[5];
+
+    if (crypt_init(&cd, datafile_opt) != 0)
+        err("crypt_init() failed: %s", datafile_opt);
+
+    struct crypt_params_verity params =
+    {
+        .data_device = datafile_opt,
+        .hash_device = hashfile_opt,
+        .hash_area_offset = 0,
+        .data_size = 0,
+        .data_block_size = 4096,
+        .hash_block_size = 4096,
+    };
+
+    if (crypt_load(cd, CRYPT_VERITY, &params) != 0)
+        err("crypt_load() failed");
+
+    if (vic_ascii_to_bin(root_hash_opt, &root_hash, &root_hash_size) != VIC_OK)
+        err("bad root-hash argument");
+
+    if (crypt_activate_by_volume_key(
+        cd,
+        name_opt,
+        (const char*)root_hash,
+        root_hash_size,
+        CRYPT_ACTIVATE_READONLY) != 0)
+    {
+        err("crypt_activate_by_volume_key() failed");
+    }
+
+    free(root_hash);
+    crypt_free(cd);
+
+    return 0;
+}
+
 static int luksGetMasterKey(int argc, const char* argv[])
 {
     vic_blockdev_t* dev;
@@ -1083,6 +1140,10 @@ int main(int argc, const char* argv[])
     else if (strcmp(argv[1], "cryptsetupLuksFormat") == 0)
     {
         return cryptsetupLuksFormat(argc, argv);
+    }
+    else if (strcmp(argv[1], "veritysetupOpen") == 0)
+    {
+        return veritysetupOpen(argc, argv);
     }
     else
     {
