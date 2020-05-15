@@ -17,3 +17,6 @@ tests:
 depend:
 	$(MAKE) -C libvicsetup depend
 	$(MAKE) -C vicsetup depend
+
+loc:
+	@ wc -l `find . -name '*.[ch]' | grep -v argon` | grep ' total$$'
