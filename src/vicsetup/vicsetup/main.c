@@ -599,6 +599,14 @@ static int veritysetupOpen(int argc, const char* argv[])
     if (vic_ascii_to_bin(root_hash_opt, &root_hash, &root_hash_size) != VIC_OK)
         err("bad root-hash argument");
 
+    /* Verity the length of the root hash */
+    {
+        int n;
+
+        if ((n = crypt_get_volume_key_size(cd)) != (int)root_hash_size)
+            err("bad root hash size (must be %d bytes)", n);
+    }
+
     if (crypt_activate_by_volume_key(
         cd,
         name_opt,
