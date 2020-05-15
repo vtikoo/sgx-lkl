@@ -61,7 +61,7 @@ fi
 
 ##==============================================================================
 ##
-## Verity that verity.hash and hashtree are idential
+## Verify that verity.hash and hashtree are idential
 ##
 ##==============================================================================
 

@@ -418,6 +418,7 @@ vic_result_t vic_verity_open(
     size_t num_blocks;
     char data_dev_path[PATH_MAX];
     char hash_dev_path[PATH_MAX];
+    size_t hash_offset;
 
     if (!dm_name || !data_dev || !hash_dev || !root_hash || !root_hash_size)
         RAISE(VIC_BAD_PARAMETER);
@@ -436,6 +437,13 @@ vic_result_t vic_verity_open(
 
     CHECK(vic_blockdev_get_path(data_dev, data_dev_path));
     CHECK(vic_blockdev_get_path(hash_dev, hash_dev_path));
+    CHECK(vic_blockdev_get_offset(hash_dev, &hash_offset));
+
+    /* Hash offset is expressed in blocks */
+    hash_offset /= sb.hash_block_size;
+
+    /* Skip over the superblock block */
+    hash_offset++;
 
     CHECK(vic_dm_create_verity(
         dm_name,
@@ -445,7 +453,7 @@ vic_result_t vic_verity_open(
         sb.hash_block_size,
         num_blocks,
         sb.version,
-        sb.hash_type,
+        hash_offset,
         sb.algorithm,
         root_hash,
         root_hash_size,

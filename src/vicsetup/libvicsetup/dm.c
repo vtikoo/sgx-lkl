@@ -12,7 +12,7 @@
 #include "integrity.h"
 #include "hexdump.h"
 
-#if 1
+#if 0
 #define TRACE_TARGET
 #endif
 
@@ -274,7 +274,7 @@ vic_result_t vic_dm_create_verity(
     size_t hash_block_size,
     size_t num_blocks,
     uint32_t version,
-    uint32_t hash_type,
+    uint32_t hash_offset,
     const char* hash_alg,
     const uint8_t* root_digest,
     size_t root_digest_size,
@@ -326,7 +326,7 @@ vic_result_t vic_dm_create_verity(
             "%zu " /* data_block_size */
             "%zu " /* hash_block_size */
             "%zu " /* num_blocks */
-            "%u "  /* hash_type */
+            "%u "  /* hash_offset*/
             "%s "  /* hash_alg */
             "%s "  /* root_digest */
             "%s "  /* salt */
@@ -337,7 +337,7 @@ vic_result_t vic_dm_create_verity(
             data_block_size,
             hash_block_size,
             num_blocks,
-            hash_type,
+            hash_offset,
             hash_alg,
             root_digest_ascii,
             salt_ascii);
