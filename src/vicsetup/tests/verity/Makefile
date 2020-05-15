@@ -4,7 +4,9 @@ export PATH+=:$(TOP)/vicsetup
 
 all:
 
-tests: dirs
+tests: dirs test1 test2 test3
+
+test1:
 	./test-verity.sh
 	./test-verity.sh 2
 	./test-verity.sh 4
@@ -16,7 +18,34 @@ tests: dirs
 	./test-verity.sh 20000
 	./test-verity.sh 30000
 
-CLEAN += hashtree verity verity.hash
+test2:
+	./test-verity.sh 1000
+	$(eval ROOTHASH := $(shell vicsetup verityDump verity.hash | grep "^Root hash:" | sed 's/Root hash:[\t ]*//g'))
+	$(eval TEMPFILE := $(shell /bin/tempfile))
+	$(eval NAME := $(shell basename $(TEMPFILE)))
+	vicsetup veritysetupOpen verity $(NAME) verity.hash $(ROOTHASH)
+	vicsetup verityClose $(NAME)
+	rm -rf $(TEMPFILE)
+
+test3: dirs
+	dd if=/dev/urandom of=verity bs=4096 count=1000
+	veritysetup format verity verity.hash
+	$(MAKE) __test3
+
+__test3:
+	cp verity file
+	cat verity.hash >> file
+	$(eval TEMPFILE := $(shell /bin/tempfile))
+	$(eval NAME := $(shell basename $(TEMPFILE)))
+	$(eval DATA_SIZE := $(shell stat --printf=%s verity))
+	$(eval HASH_AREA_OFFSET := $(DATA_SIZE))
+	$(eval ROOTHASH := $(shell vicsetup verityDump verity.hash | grep "^Root hash:" | sed 's/Root hash:[\t ]*//g'))
+	vicsetup veritysetupOpen --data-size $(DATA_SIZE) --hash-area-offset $(HASH_AREA_OFFSET) file $(NAME) file $(ROOTHASH)
+	@ echo "Created /dev/mapper/$(NAME)"
+	vicsetup verityClose $(NAME)
+	rm -rf $(TEMPFILE)
+
+CLEAN += hashtree verity verity.hash file
 
 DIRS += $(TOP)/vicsetup
 

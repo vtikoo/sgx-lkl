@@ -12,7 +12,7 @@
 #include "integrity.h"
 #include "hexdump.h"
 
-#if 0
+#if 1
 #define TRACE_TARGET
 #endif
 
