@@ -15,4 +15,5 @@ vicsetup/depend.mak
 tests/cryptsetup/KEY
 tests/cryptsetup/LUKS
 tests/blockdev/file
+tests/verity/file
 tests/blockdev/test_blockdev
