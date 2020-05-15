@@ -5,6 +5,8 @@
 
     (A) Support hash device being embedded in data device
 
+    (A) Support verity block sizes other than 4096
+
     BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 
     (B) Cleanup verity helper functions.

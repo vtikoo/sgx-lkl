@@ -94,6 +94,14 @@ typedef struct _vic_blockdev vic_blockdev_t;
 
 typedef struct _vic_blockdev
 {
+    vic_result_t (*bd_set_size)(
+        vic_blockdev_t* dev,
+        size_t size);
+
+    vic_result_t (*bd_set_offset)(
+        vic_blockdev_t* dev,
+        size_t offset);
+
     vic_result_t (*bd_get_path)(
         const vic_blockdev_t* dev,
         char path[PATH_MAX]);
@@ -106,9 +114,9 @@ typedef struct _vic_blockdev
         vic_blockdev_t* dev,
         size_t block_size);
 
-    vic_result_t (*bd_get_byte_size)(
+    vic_result_t (*bd_get_size)(
         const vic_blockdev_t* dev,
-        size_t* byte_size);
+        size_t* size);
 
     vic_result_t (*bd_get_num_blocks)(
         const vic_blockdev_t* dev,
@@ -126,6 +134,11 @@ typedef struct _vic_blockdev
         const void* blocks,
         size_t nblocks);
 
+    vic_result_t (*bd_same)(
+        vic_blockdev_t* bd1,
+        vic_blockdev_t* bd2,
+        bool* same);
+
     vic_result_t (*bd_close)(vic_blockdev_t* dev);
 }
 vic_blockdev_t;
@@ -142,6 +155,14 @@ vic_result_t vic_blockdev_open(
     size_t block_size, /* defaults to 512 if zero */
     vic_blockdev_t** dev);
 
+vic_result_t vic_blockdev_set_size(
+    vic_blockdev_t* dev,
+    size_t size);
+
+vic_result_t vic_blockdev_set_offset(
+    vic_blockdev_t* dev,
+    size_t offset);
+
 vic_result_t vic_blockdev_get_path(
     const vic_blockdev_t* dev,
     char path[PATH_MAX]);
@@ -154,9 +175,9 @@ vic_result_t vic_blockdev_set_block_size(
     vic_blockdev_t* dev,
     size_t block_size);
 
-vic_result_t vic_blockdev_get_byte_size(
+vic_result_t vic_blockdev_get_size(
     const vic_blockdev_t* dev,
-    size_t* byte_size);
+    size_t* size);
 
 vic_result_t vic_blockdev_get_num_blocks(
     vic_blockdev_t* dev,
@@ -173,6 +194,11 @@ vic_result_t vic_blockdev_put(
     uint64_t blkno,
     const void* blocks,
     size_t nblocks);
+
+vic_result_t vic_blockdev_same(
+    vic_blockdev_t* bd1,
+    vic_blockdev_t* bd2,
+    bool* same);
 
 vic_result_t vic_blockdev_close(vic_blockdev_t* dev);
 

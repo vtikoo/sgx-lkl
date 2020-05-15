@@ -19,7 +19,11 @@ typedef struct _blockdev
     vic_blockdev_t base;
     uint64_t magic;
     char path[PATH_MAX];
+    size_t full_size;
+    size_t size;
+    size_t offset;
     size_t block_size;
+    uint32_t flags;
     int fd;
 }
 blockdev_t;
@@ -35,40 +39,105 @@ static bool _is_power_of_two(size_t x)
     return false;
 }
 
-static bool _valid_blockdev(const blockdev_t* dev)
+static bool _valid_blockdev(const blockdev_t* bd)
 {
-    return dev && dev->magic == MAGIC;
+    return bd && bd->magic == MAGIC;
 }
 
 /* Check that device size is a multiple of the block size */
-static vic_result_t _check_block_multiple(blockdev_t* dev, size_t block_size)
+static vic_result_t _check_block_multiple(blockdev_t* bd, size_t block_size)
 {
     vic_result_t result = VIC_OK;
-    size_t byte_size;
+    size_t size;
 
-    CHECK(vic_blockdev_get_byte_size(&dev->base, &byte_size));
+    CHECK(vic_blockdev_get_size(&bd->base, &size));
 
-    if (byte_size % block_size)
+    if (size % block_size)
         RAISE(VIC_NOT_BLOCK_MULTIPLE);
 
 done:
     return result;
 }
 
+static vic_result_t _get_full_size(int fd, size_t* size_out)
+{
+    vic_result_t result = VIC_OK;
+    struct stat st;
+    size_t size;
+
+    if (fstat(fd, &st) != 0)
+        RAISE(VIC_STAT_FAILED);
+
+    if (S_ISREG(st.st_mode))
+        size = st.st_size;
+    else if (ioctl(fd, BLKGETSIZE64, &size) != 0)
+        RAISE(VIC_IOCTL_FAILED);
+
+    *size_out = size;
+
+done:
+
+    return result;
+}
+
+static vic_result_t _bd_set_offset(vic_blockdev_t* bd_, size_t offset)
+{
+    vic_result_t result = VIC_OK;
+    blockdev_t* bd = (blockdev_t*)bd_;
+
+    if (!_valid_blockdev(bd))
+        RAISE(VIC_BAD_PARAMETER);
+
+    /* offset must be a multiple of the block size */
+    if (offset % bd->block_size)
+        RAISE(VIC_BAD_PARAMETER);
+
+    /* Check that offset is within the file */
+    if (offset > bd->size)
+        RAISE(VIC_BAD_PARAMETER);
+
+    bd->offset = offset;
+
+done:
+    return result;
+}
+
+static vic_result_t _bd_set_size(vic_blockdev_t* bd_, size_t size)
+{
+    vic_result_t result = VIC_OK;
+    blockdev_t* bd = (blockdev_t*)bd_;
+
+    if (!_valid_blockdev(bd))
+        RAISE(VIC_BAD_PARAMETER);
+
+    /* size must be a multiple of the block size */
+    if (size % bd->block_size)
+        RAISE(VIC_BAD_PARAMETER);
+
+    /* Check that size is within range */
+    if (size > bd->full_size)
+        RAISE(VIC_BAD_PARAMETER);
+
+    bd->size = size;
+
+done:
+    return result;
+}
+
 static vic_result_t _bd_get_path(
-    const vic_blockdev_t* dev_,
+    const vic_blockdev_t* bd_,
     char path[PATH_MAX])
 {
     vic_result_t result = VIC_UNEXPECTED;
-    const blockdev_t* dev = (const blockdev_t*)dev_;
+    const blockdev_t* bd = (const blockdev_t*)bd_;
 
-    if (!_valid_blockdev(dev))
+    if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
     if (!path)
         RAISE(VIC_BAD_PARAMETER);
 
-    vic_strlcpy(path, dev->path, PATH_MAX);
+    vic_strlcpy(path, bd->path, PATH_MAX);
 
     result = VIC_OK;
 
@@ -77,98 +146,75 @@ done:
 }
 
 static vic_result_t _bd_get_block_size(
-    const vic_blockdev_t* dev_,
+    const vic_blockdev_t* bd_,
     size_t* block_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    const blockdev_t* dev = (const blockdev_t*)dev_;
+    const blockdev_t* bd = (const blockdev_t*)bd_;
 
-    if (!_valid_blockdev(dev))
-        RAISE(VIC_BAD_BLOCK_DEVICE);
-
-    if (!block_size)
+    if (!_valid_blockdev(bd) || !block_size)
         RAISE(VIC_BAD_PARAMETER);
 
-    *block_size = dev->block_size;
+    *block_size = bd->block_size;
     result = VIC_OK;
 
 done:
     return result;
 }
 
+static vic_result_t _bd_get_size(const vic_blockdev_t* bd_, size_t* size)
+{
+    vic_result_t result = VIC_OK;
+    const blockdev_t* bd = (const blockdev_t*)bd_;
+
+    if (!_valid_blockdev(bd) || !size)
+        RAISE(VIC_BAD_BLOCK_DEVICE);
+
+    *size = bd->size;
+
+done:
+
+    return result;
+}
+
 static vic_result_t _bd_set_block_size(
-    vic_blockdev_t* dev_,
+    vic_blockdev_t* bd_,
     size_t block_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    blockdev_t* dev = (blockdev_t*)dev_;
-    size_t byte_size;
+    blockdev_t* bd = (blockdev_t*)bd_;
+    size_t size;
 
-    if (!_valid_blockdev(dev))
+    if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_PARAMETER);
 
     if (!block_size || !_is_power_of_two(block_size))
         RAISE(VIC_BAD_PARAMETER);
 
-    CHECK(vic_blockdev_get_byte_size(dev_, &byte_size));
+    CHECK(_bd_get_size(bd_, &size));
+    CHECK(_check_block_multiple(bd, block_size));
 
-    CHECK(_check_block_multiple(dev, block_size));
-
-    dev->block_size = block_size;
+    bd->block_size = block_size;
     result = VIC_OK;
 
 done:
-    return result;
-}
-
-static vic_result_t _bd_get_byte_size(
-    const vic_blockdev_t* dev_,
-    size_t* byte_size)
-{
-    vic_result_t result = VIC_UNEXPECTED;
-    const blockdev_t* dev = (const blockdev_t*)dev_;
-    struct stat st;
-
-    if (!_valid_blockdev(dev))
-        RAISE(VIC_BAD_BLOCK_DEVICE);
-
-    if (!byte_size)
-        RAISE(VIC_BAD_PARAMETER);
-
-    if (fstat(dev->fd, &st) != 0)
-        RAISE(VIC_STAT_FAILED);
-
-    if (S_ISREG(st.st_mode))
-        *byte_size = st.st_size;
-    else if (ioctl(dev->fd, BLKGETSIZE64, byte_size) != 0)
-        RAISE(VIC_IOCTL_FAILED);
-
-    result = VIC_OK;
-
-done:
-
     return result;
 }
 
 static vic_result_t _bd_get_num_blocks(
-    const vic_blockdev_t* dev_,
+    const vic_blockdev_t* bd_,
     size_t* num_blocks)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    const blockdev_t* dev = (const blockdev_t*)dev_;
-    size_t byte_size;
-    size_t block_size;
+    const blockdev_t* bd = (const blockdev_t*)bd_;
 
-    if (!_valid_blockdev(dev))
+    if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
     if (!num_blocks)
         RAISE(VIC_BAD_PARAMETER);
 
-    CHECK(vic_blockdev_get_byte_size(dev_, &byte_size));
-    CHECK(vic_blockdev_get_block_size(dev_, &block_size));
-
-    *num_blocks = byte_size / block_size;
+    *num_blocks = bd->size / bd->block_size;
 
     result = VIC_OK;
 
@@ -178,30 +224,32 @@ done:
 }
 
 static vic_result_t _bd_get(
-    vic_blockdev_t* dev_,
+    vic_blockdev_t* bd_,
     uint64_t blkno,
     void* blocks,
     size_t nblocks)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    blockdev_t* dev = (blockdev_t*)dev_;
+    blockdev_t* bd = (blockdev_t*)bd_;
     off_t off;
     size_t size;
 
-    if (!_valid_blockdev(dev))
+    if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
     if (!blocks)
         RAISE(VIC_BAD_PARAMETER);
 
-    off = blkno * dev->block_size;
+    off = (blkno * bd->block_size) + bd->offset;;
+    size = nblocks * bd->block_size;
 
-    if (lseek(dev->fd, off, SEEK_SET) != off)
+    if (off + size > bd->size)
         RAISE(VIC_SEEK_FAILED);
 
-    size = nblocks * dev->block_size;
+    if (lseek(bd->fd, off, SEEK_SET) != off)
+        RAISE(VIC_SEEK_FAILED);
 
-    if (read(dev->fd, blocks, size) != (ssize_t)size)
+    if (read(bd->fd, blocks, size) != (ssize_t)size)
         RAISE(VIC_READ_FAILED);
 
     result = VIC_OK;
@@ -211,31 +259,36 @@ done:
 }
 
 static vic_result_t _bd_put(
-    vic_blockdev_t* dev_,
+    vic_blockdev_t* bd_,
     uint64_t blkno,
     const void* blocks,
     size_t nblocks)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    blockdev_t* dev = (blockdev_t*)dev_;
+    blockdev_t* bd = (blockdev_t*)bd_;
     off_t off;
     size_t size;
 
-    if (!_valid_blockdev(dev))
+    if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
     if (!blocks)
         RAISE(VIC_BAD_PARAMETER);
 
-    off = blkno * dev->block_size;
+    off = (blkno * bd->block_size) + bd->offset;;
+    size = nblocks * bd->block_size;
 
-    if (lseek(dev->fd, off, SEEK_SET) != off)
+    if (!(bd->flags & VIC_CREATE) && (off + size) > bd->size)
         RAISE(VIC_SEEK_FAILED);
 
-    size = nblocks * dev->block_size;
+    if (lseek(bd->fd, off, SEEK_SET) != off)
+        RAISE(VIC_SEEK_FAILED);
 
-    if (write(dev->fd, blocks, size) != (ssize_t)size)
+    if (write(bd->fd, blocks, size) != (ssize_t)size)
         RAISE(VIC_READ_FAILED);
+
+    if ((bd->flags & VIC_CREATE) && (off + size) > bd->size)
+        bd->size = off + size;
 
     result = VIC_OK;
 
@@ -243,17 +296,47 @@ done:
     return result;
 }
 
-static vic_result_t _bd_close(vic_blockdev_t* dev_)
+static vic_result_t _bd_same(
+    vic_blockdev_t* bd1_,
+    vic_blockdev_t* bd2_,
+    bool* same)
+{
+    vic_result_t result = VIC_OK;
+    blockdev_t* bd1 = (blockdev_t*)bd1_;
+    blockdev_t* bd2 = (blockdev_t*)bd2_;
+    struct stat st1;
+    struct stat st2;
+
+    if (same)
+        *same = false;
+
+    if (!_valid_blockdev(bd1) || !_valid_blockdev(bd2) || !same)
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (bd1->fd < 0 || bd1->fd < 0)
+        RAISE(VIC_BAD_PARAMETER);
+
+    if (fstat(bd1->fd, &st1) != 0 || fstat(bd2->fd, &st2) != 0)
+        RAISE(VIC_STAT_FAILED);
+
+    if (st1.st_ino == st2.st_ino)
+        *same = true;
+
+done:
+    return result;
+}
+
+static vic_result_t _bd_close(vic_blockdev_t* bd_)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    blockdev_t* dev = (blockdev_t*)dev_;
+    blockdev_t* bd = (blockdev_t*)bd_;
 
-    if (!_valid_blockdev(dev))
+    if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
-    close(dev->fd);
-    memset(dev, 0, sizeof(blockdev_t));
-    free(dev);
+    close(bd->fd);
+    memset(bd, 0, sizeof(blockdev_t));
+    free(bd);
 
     result = VIC_OK;
 
@@ -268,7 +351,7 @@ vic_result_t vic_blockdev_open(
     vic_blockdev_t** dev_out)
 {
     vic_result_t result = VIC_UNEXPECTED;
-    blockdev_t* dev = NULL;
+    blockdev_t* bd = NULL;
     int open_flags = 0;
     int mode = 0;
 
@@ -314,51 +397,58 @@ vic_result_t vic_blockdev_open(
     if (!path || !_is_power_of_two(block_size) || !dev_out)
         RAISE(VIC_BAD_PARAMETER);
 
-    if (!(dev = calloc(1, sizeof(blockdev_t))))
+    if (!(bd = calloc(1, sizeof(blockdev_t))))
         RAISE(VIC_OUT_OF_MEMORY);
 
-    dev->magic = MAGIC;
+    bd->magic = MAGIC;
 
-    if (vic_strlcpy(dev->path, path, PATH_MAX) >= PATH_MAX)
+    if (vic_strlcpy(bd->path, path, PATH_MAX) >= PATH_MAX)
         RAISE(VIC_UNEXPECTED);
 
-    if ((dev->fd = open(path, open_flags, mode)) < 0)
+    if ((bd->fd = open(path, open_flags, mode)) < 0)
         RAISE(VIC_OPEN_FAILED);
 
-    dev->base.bd_get_path = _bd_get_path;
-    dev->base.bd_get = _bd_get;
-    dev->base.bd_put = _bd_put;
-    dev->base.bd_get_byte_size = _bd_get_byte_size;
-    dev->base.bd_get_num_blocks = _bd_get_num_blocks;
-    dev->base.bd_get_block_size = _bd_get_block_size;
-    dev->base.bd_set_block_size = _bd_set_block_size;
-    dev->base.bd_close = _bd_close;
-    dev->block_size = block_size;
+    CHECK(_get_full_size(bd->fd, &bd->full_size));
+    bd->size = bd->full_size;
+    bd->block_size = block_size;
+    bd->flags = flags;
 
-    CHECK(_check_block_multiple(dev, block_size));
+    bd->base.bd_set_size = _bd_set_size;
+    bd->base.bd_set_offset = _bd_set_offset;
+    bd->base.bd_get_path = _bd_get_path;
+    bd->base.bd_get = _bd_get;
+    bd->base.bd_put = _bd_put;
+    bd->base.bd_get_size = _bd_get_size;
+    bd->base.bd_get_num_blocks = _bd_get_num_blocks;
+    bd->base.bd_get_block_size = _bd_get_block_size;
+    bd->base.bd_set_block_size = _bd_set_block_size;
+    bd->base.bd_same = _bd_same;
+    bd->base.bd_close = _bd_close;
 
-    *dev_out = &dev->base;
-    dev = NULL;
+    CHECK(_check_block_multiple(bd, block_size));
+
+    *dev_out = &bd->base;
+    bd = NULL;
     result = VIC_OK;
 
 done:
 
-    if (dev)
-        free(dev);
+    if (bd)
+        free(bd);
 
     return result;
 }
 
 vic_result_t vic_blockdev_get_path(
-    const vic_blockdev_t* dev,
+    const vic_blockdev_t* bd,
     char path[PATH_MAX])
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_get_path(dev, path));
+    CHECK(bd->bd_get_path(bd, path));
     result = VIC_OK;
 
 done:
@@ -366,15 +456,15 @@ done:
 }
 
 vic_result_t vic_blockdev_get_block_size(
-    const vic_blockdev_t* dev,
+    const vic_blockdev_t* bd,
     size_t* block_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_get_block_size(dev, block_size));
+    CHECK(bd->bd_get_block_size(bd, block_size));
     result = VIC_OK;
 
 done:
@@ -382,31 +472,31 @@ done:
 }
 
 vic_result_t vic_blockdev_set_block_size(
-    vic_blockdev_t* dev,
+    vic_blockdev_t* bd,
     size_t block_size)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_set_block_size(dev, block_size));
+    CHECK(bd->bd_set_block_size(bd, block_size));
     result = VIC_OK;
 
 done:
     return result;
 }
 
-vic_result_t vic_blockdev_get_byte_size(
-    const vic_blockdev_t* dev,
-    size_t* byte_size)
+vic_result_t vic_blockdev_get_size(
+    const vic_blockdev_t* bd,
+    size_t* size)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_get_byte_size(dev, byte_size));
+    CHECK(bd->bd_get_size(bd, size));
     result = VIC_OK;
 
 done:
@@ -414,15 +504,15 @@ done:
 }
 
 vic_result_t vic_blockdev_get_num_blocks(
-    vic_blockdev_t* dev,
+    vic_blockdev_t* bd,
     size_t* num_blocks)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_get_num_blocks(dev, num_blocks));
+    CHECK(bd->bd_get_num_blocks(bd, num_blocks));
     result = VIC_OK;
 
 done:
@@ -430,17 +520,17 @@ done:
 }
 
 vic_result_t vic_blockdev_get(
-    vic_blockdev_t* dev,
+    vic_blockdev_t* bd,
     uint64_t blkno,
     void* blocks,
     size_t nblocks)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_get(dev, blkno, blocks, nblocks));
+    CHECK(bd->bd_get(bd, blkno, blocks, nblocks));
     result = VIC_OK;
 
 done:
@@ -448,32 +538,73 @@ done:
 }
 
 vic_result_t vic_blockdev_put(
-    vic_blockdev_t* dev,
+    vic_blockdev_t* bd,
     uint64_t blkno,
     const void* blocks,
     size_t nblocks)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
-    if (!dev)
+    if (!bd)
         RAISE(result);
 
-    CHECK(dev->bd_put(dev, blkno, blocks, nblocks));
+    CHECK(bd->bd_put(bd, blkno, blocks, nblocks));
     result = VIC_OK;
 
 done:
     return result;
 }
 
-vic_result_t vic_blockdev_close(vic_blockdev_t* dev)
+vic_result_t vic_blockdev_close(vic_blockdev_t* bd)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
 
-    if (!dev)
-        RAISE(result);
+    if (!bd || !bd->bd_close)
+        RAISE(VIC_BAD_PARAMETER);
 
-    CHECK(dev->bd_close(dev));
-    result = VIC_OK;
+    CHECK(bd->bd_close(bd));
+
+done:
+    return result;
+}
+
+vic_result_t vic_blockdev_same(
+    vic_blockdev_t* bd1,
+    vic_blockdev_t* bd2,
+    bool* same)
+{
+    vic_result_t result = VIC_OK;
+
+    if (!bd1 || !bd2 || !bd1->bd_same || !bd2->bd_same)
+        RAISE(VIC_BAD_PARAMETER);
+
+    CHECK(bd1->bd_same(bd1, bd2, same));
+
+done:
+    return result;
+}
+
+vic_result_t vic_blockdev_set_offset(vic_blockdev_t* bd, size_t offset)
+{
+    vic_result_t result = VIC_OK;
+
+    if (!bd || !bd->bd_set_offset)
+        RAISE(VIC_BAD_PARAMETER);
+
+    CHECK(bd->bd_set_offset(bd, offset));
+
+done:
+    return result;
+}
+
+vic_result_t vic_blockdev_set_size(vic_blockdev_t* bd, size_t size)
+{
+    vic_result_t result = VIC_OK;
+
+    if (!bd || !bd->bd_set_size)
+        RAISE(VIC_BAD_PARAMETER);
+
+    CHECK(bd->bd_set_size(bd, size));
 
 done:
     return result;

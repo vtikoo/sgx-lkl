@@ -146,7 +146,7 @@ vic_result_t vic_verity_format(
     {
         size_t size;
 
-        CHECK(vic_blockdev_get_byte_size(data_dev, &size));
+        CHECK(vic_blockdev_get_size(data_dev, &size));
 
         /* File must be a multiple of the block size */
         if (size % blk_sz)
@@ -428,7 +428,7 @@ vic_result_t vic_verity_open(
     if (!_is_valid_device(hash_dev))
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
-    CHECK(vic_blockdev_get_byte_size(data_dev, &data_dev_size));
+    CHECK(vic_blockdev_get_size(data_dev, &data_dev_size));
 
     CHECK(vic_verity_read_superblock(hash_dev, &sb));
 

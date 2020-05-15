@@ -12,6 +12,7 @@
 #include "integrity.h"
 #include "strings.h"
 #include "crypto.h"
+#include "device.h"
 
 #define MAGIC 0xa8ea23c6
 
@@ -21,6 +22,7 @@ struct crypt_device
     char type[16];
     char dm_name[PATH_MAX];
     vic_blockdev_t* bd;
+    vic_blockdev_t* hbd; /* hash block device */
     char path[PATH_MAX];
     bool readonly;
 
@@ -64,21 +66,13 @@ static int _set_pbkdf_type(
 
     if (pbkdf->type)
     {
-        const size_t n = sizeof(cd->luks2.pbkdf_type_buf);
-
-        if (vic_strlcpy(cd->luks2.pbkdf_type_buf, pbkdf->type, n) >= n)
-            ERAISE(EINVAL);
-
+        ECHECK(STRLCPY(cd->luks2.pbkdf_type_buf, pbkdf->type));
         cd->luks2.pbkdf.type = cd->luks2.pbkdf_type_buf;
     }
 
     if (pbkdf->hash)
     {
-        const size_t n = sizeof(cd->luks2.pbkdf_hash_buf);
-
-        if (vic_strlcpy(cd->luks2.pbkdf_hash_buf, pbkdf->hash, n) >= n)
-            ERAISE(EINVAL);
-
+        ECHECK(STRLCPY(cd->luks2.pbkdf_hash_buf, pbkdf->hash));
         cd->luks2.pbkdf.hash = cd->luks2.pbkdf_hash_buf;
     }
 
@@ -184,6 +178,9 @@ void crypt_free(struct crypt_device* cd)
         if (cd->bd)
             vic_blockdev_close(cd->bd);
 
+        if (cd->hbd)
+            vic_blockdev_close(cd->hbd);
+
         if (_is_luks1(cd->type))
         {
             if (*cd->dm_name)
@@ -244,7 +241,7 @@ int crypt_format(
     ECHECK(_force_open_for_write(cd));
 
     /* Save the type for use in subsequent calls */
-    vic_strlcpy(cd->type, type, sizeof(cd->type));
+    ECHECK(STRLCPY(cd->type, type));
 
     if (strcmp(type, CRYPT_LUKS1) == 0)
     {
@@ -323,7 +320,7 @@ int crypt_format(
             ERAISE(EINVAL);
 
         /* Save the cipher for later (used when adding keyslots) */
-        vic_strlcpy(cd->luks2.cipher, cipher, sizeof(cd->luks2.cipher));
+        ECHECK(STRLCPY(cd->luks2.cipher, cipher));
 
         if ((r = luks2_format(
             cd->bd,
@@ -442,6 +439,91 @@ done:
     return ret;
 }
 
+static int _crypt_load_verity(
+    struct crypt_device* cd,
+    struct crypt_params_verity* p)
+{
+    int ret = 0;
+    /* ATTN: block size hardcoded for 4096 for now */
+    const size_t BLOCK_SIZE = 4096;
+    vic_blockdev_t* hbd = NULL;
+
+    if (!p || !p->data_device || !p->hash_device)
+        ERAISE(EINVAL);
+
+    if (p->fec_device)
+        ERAISE(ENOTSUP);
+
+    /* Handle the data device */
+    {
+        size_t block_size;
+
+        if (strcmp(p->data_device, cd->path) != 0)
+            ERAISE(EINVAL);
+
+        if (vic_blockdev_set_block_size(cd->bd, BLOCK_SIZE) != VIC_OK)
+            ERAISE(EINVAL);
+
+        if (vic_blockdev_get_block_size(cd->bd, &block_size) != VIC_OK)
+            ERAISE(EIO);
+
+        if (p->data_block_size && p->data_block_size != block_size)
+            ERAISE(EINVAL);
+    }
+
+    /* Handle the hash device */
+    {
+        vic_verity_sb_t sb;
+
+        if (vic_blockdev_open(p->hash_device, VIC_RDONLY, 0, &hbd) != VIC_OK)
+            ERAISE(ENOENT);
+
+        if (vic_blockdev_set_block_size(hbd, BLOCK_SIZE) != VIC_OK)
+            ERAISE(EINVAL);
+
+        if (vic_blockdev_set_offset(hbd, p->hash_area_offset) != VIC_OK)
+            ERAISE(EINVAL);
+
+        if (vic_verity_read_superblock(hbd, &sb) != VIC_OK)
+            ERAISE(EIO);
+
+        if (sb.data_block_size != BLOCK_SIZE)
+            ERAISE(ENOTSUP);
+
+        if (sb.hash_block_size != BLOCK_SIZE)
+            ERAISE(ENOTSUP);
+
+        if (p->hash_block_size && p->hash_block_size != sb.hash_block_size)
+            ERAISE(EINVAL);
+
+        if (p->data_block_size && p->data_block_size != sb.data_block_size)
+            ERAISE(EINVAL);
+
+        cd->verity.sb = sb;
+    }
+
+    /* If the data-device and hash-device and the same file */
+    {
+        bool same;
+        ECHECK(vic_blockdev_same(cd->bd, hbd, &same));
+
+        if (same)
+        {
+            if (p->hash_area_offset == 0)
+                ERAISE(EINVAL);
+        }
+    }
+
+    cd->hbd = hbd;
+    hbd = NULL;
+
+done:
+
+    if (hbd)
+        vic_blockdev_close(hbd);
+
+    return ret;
+}
 
 int crypt_load(
     struct crypt_device* cd,
@@ -460,48 +542,22 @@ int crypt_load(
 
     if (strcmp(requested_type, CRYPT_LUKS1) == 0)
     {
-        vic_strlcpy(cd->type, requested_type, sizeof(cd->type));
+        ECHECK(STRLCPY(cd->type, requested_type));
 
         if (luks1_read_hdr(cd->bd, &cd->luks1.hdr) != VIC_OK)
             ERAISE(EIO);
     }
     else if (strcmp(requested_type, CRYPT_LUKS2) == 0)
     {
-        vic_strlcpy(cd->type, requested_type, sizeof(cd->type));
+        ECHECK(STRLCPY(cd->type, requested_type));
 
         if (luks2_read_hdr(cd->bd, &cd->luks2.hdr) != VIC_OK)
             ERAISE(EIO);
     }
     else if (strcmp(requested_type, CRYPT_VERITY) == 0)
     {
-        vic_verity_sb_t sb;
-        const size_t expected_block_size = 4096;
-        size_t block_size;
-
-        vic_strlcpy(cd->type, requested_type, sizeof(cd->type));
-
-        if (vic_blockdev_set_block_size(cd->bd, expected_block_size) != VIC_OK)
-            ERAISE(EINVAL);
-
-        /* TODO: this must be executed on the hash device not data device */
-        if (vic_verity_read_superblock(cd->bd, &sb) != VIC_OK)
-            ERAISE(EIO);
-
-        if (sb.data_block_size != expected_block_size)
-            ERAISE(ENOTSUP);
-
-        if (sb.hash_block_size != expected_block_size)
-            ERAISE(ENOTSUP);
-
-        if (vic_blockdev_get_block_size(cd->bd, &block_size) != VIC_OK)
-            ERAISE(EINVAL);
-
-        if (block_size != expected_block_size)
-            ERAISE(ENOTSUP);
-
-        cd->verity.sb = sb;
-
-        /* TODO: handle params here! */
+        ECHECK(STRLCPY(cd->type, requested_type));
+        ECHECK(_crypt_load_verity(cd, params));
     }
     else
     {
@@ -558,9 +614,7 @@ int crypt_activate_by_passphrase(
         if (luks1_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
             ERAISE(EIO);
 
-        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
-
-        ERAISE(ENOTSUP);
+        ECHECK(STRLCPY(cd->dm_name, name));
     }
     else if (_is_luks2(cd->type))
     {
@@ -585,9 +639,7 @@ int crypt_activate_by_passphrase(
         if (luks2_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
             ERAISE(EIO);
 
-        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
-
-        ERAISE(ENOTSUP);
+        ECHECK(STRLCPY(cd->dm_name, name));
     }
     else if (_is_verity(cd->type))
     {
@@ -644,7 +696,7 @@ int crypt_activate_by_volume_key(
         if (luks1_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
             ERAISE(EIO);
 
-        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
+        ECHECK(STRLCPY(cd->dm_name, name));
 
         ERAISE(ENOTSUP);
     }
@@ -667,7 +719,7 @@ int crypt_activate_by_volume_key(
         if (luks2_open(cd->bd, cd->path, name, &key, key_size) != VIC_OK)
             ERAISE(EIO);
 
-        vic_strlcpy(cd->dm_name, name, sizeof(cd->dm_name));
+        ECHECK(STRLCPY(cd->dm_name, name));
 
         ERAISE(ENOTSUP);
     }
