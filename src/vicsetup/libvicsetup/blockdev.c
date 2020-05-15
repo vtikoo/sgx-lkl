@@ -48,11 +48,8 @@ static bool _valid_blockdev(const blockdev_t* bd)
 static vic_result_t _check_block_multiple(blockdev_t* bd, size_t block_size)
 {
     vic_result_t result = VIC_OK;
-    size_t size;
 
-    CHECK(vic_blockdev_get_size(&bd->base, &size));
-
-    if (size % block_size)
+    if (bd->size % block_size)
         RAISE(VIC_NOT_BLOCK_MULTIPLE);
 
 done:
@@ -97,6 +94,20 @@ static vic_result_t _bd_set_offset(vic_blockdev_t* bd_, size_t offset)
         RAISE(VIC_BAD_PARAMETER);
 
     bd->offset = offset;
+
+done:
+    return result;
+}
+
+static vic_result_t _bd_get_offset(vic_blockdev_t* bd_, size_t* offset)
+{
+    vic_result_t result = VIC_OK;
+    blockdev_t* bd = (blockdev_t*)bd_;
+
+    if (!_valid_blockdev(bd))
+        RAISE(VIC_BAD_PARAMETER);
+
+    *offset = bd->offset;
 
 done:
     return result;
@@ -170,7 +181,7 @@ static vic_result_t _bd_get_size(const vic_blockdev_t* bd_, size_t* size)
     if (!_valid_blockdev(bd) || !size)
         RAISE(VIC_BAD_BLOCK_DEVICE);
 
-    *size = bd->size;
+    *size = bd->size - bd->offset;
 
 done:
 
@@ -183,7 +194,6 @@ static vic_result_t _bd_set_block_size(
 {
     vic_result_t result = VIC_UNEXPECTED;
     blockdev_t* bd = (blockdev_t*)bd_;
-    size_t size;
 
     if (!_valid_blockdev(bd))
         RAISE(VIC_BAD_PARAMETER);
@@ -191,7 +201,6 @@ static vic_result_t _bd_set_block_size(
     if (!block_size || !_is_power_of_two(block_size))
         RAISE(VIC_BAD_PARAMETER);
 
-    CHECK(_bd_get_size(bd_, &size));
     CHECK(_check_block_multiple(bd, block_size));
 
     bd->block_size = block_size;
@@ -214,7 +223,7 @@ static vic_result_t _bd_get_num_blocks(
     if (!num_blocks)
         RAISE(VIC_BAD_PARAMETER);
 
-    *num_blocks = bd->size / bd->block_size;
+    *num_blocks = (bd->size - bd->offset) / bd->block_size;
 
     result = VIC_OK;
 
@@ -415,6 +424,7 @@ vic_result_t vic_blockdev_open(
 
     bd->base.bd_set_size = _bd_set_size;
     bd->base.bd_set_offset = _bd_set_offset;
+    bd->base.bd_get_offset = _bd_get_offset;
     bd->base.bd_get_path = _bd_get_path;
     bd->base.bd_get = _bd_get;
     bd->base.bd_put = _bd_put;
@@ -592,6 +602,19 @@ vic_result_t vic_blockdev_set_offset(vic_blockdev_t* bd, size_t offset)
         RAISE(VIC_BAD_PARAMETER);
 
     CHECK(bd->bd_set_offset(bd, offset));
+
+done:
+    return result;
+}
+
+vic_result_t vic_blockdev_get_offset(vic_blockdev_t* bd, size_t* offset)
+{
+    vic_result_t result = VIC_OK;
+
+    if (!bd || !bd->bd_get_offset)
+        RAISE(VIC_BAD_PARAMETER);
+
+    CHECK(bd->bd_get_offset(bd, offset));
 
 done:
     return result;

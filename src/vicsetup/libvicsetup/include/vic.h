@@ -102,6 +102,10 @@ typedef struct _vic_blockdev
         vic_blockdev_t* dev,
         size_t offset);
 
+    vic_result_t (*bd_get_offset)(
+        vic_blockdev_t* dev,
+        size_t* offset);
+
     vic_result_t (*bd_get_path)(
         const vic_blockdev_t* dev,
         char path[PATH_MAX]);
@@ -162,6 +166,10 @@ vic_result_t vic_blockdev_set_size(
 vic_result_t vic_blockdev_set_offset(
     vic_blockdev_t* dev,
     size_t offset);
+
+vic_result_t vic_blockdev_get_offset(
+    vic_blockdev_t* dev,
+    size_t* offset);
 
 vic_result_t vic_blockdev_get_path(
     const vic_blockdev_t* dev,
