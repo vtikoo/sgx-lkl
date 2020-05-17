@@ -18,12 +18,6 @@ void vic_hexdump(const void* data, size_t size);
 
 void vic_hexdump_flat(const void* data, size_t size);
 
-int vic_hexdump_str(
-    char* buf,
-    size_t buf_size,
-    const void* data,
-    size_t size);
-
 vic_result_t vic_bin_to_ascii(const void* data, size_t size, char** ascii);
 
 vic_result_t vic_ascii_to_bin(const char* ascii, uint8_t** data, size_t* size);

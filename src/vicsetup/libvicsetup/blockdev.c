@@ -10,9 +10,9 @@
 #include "strings.h"
 #include "raise.h"
 
-#define DEFAULT_BLOCK_SIZE 512
-
 #define MAGIC 0xf3fcef718ce744bd
+
+#define DEFAULT_BLOCK_SIZE 512
 
 typedef struct _blockdev
 {

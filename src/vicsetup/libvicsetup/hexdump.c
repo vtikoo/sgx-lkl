@@ -89,33 +89,6 @@ void vic_hexdump_flat(const void* data, size_t size)
     vic_hexdump_special(data, size, false, false, 0);
 }
 
-int vic_hexdump_str(
-    char* buf,
-    size_t buf_size,
-    const void* data,
-    size_t size)
-{
-    int ret = -1;
-    size_t len = 2 * size;
-    const uint8_t* p = (const uint8_t*)data;
-    char* q = buf;
-
-    if (!buf || !data || len >= buf_size)
-        goto done;
-
-    while (size--)
-    {
-        snprintf(q, 3, "%02x", *p);
-        p++;
-        q += 2;
-    }
-
-    ret = 0;
-
-done:
-    return ret;
-}
-
 vic_result_t vic_bin_to_ascii(const void* data_, size_t size, char** ascii_out)
 {
     const uint8_t* data = (const uint8_t*)data_;
