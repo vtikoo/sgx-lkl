@@ -79,6 +79,7 @@ typedef enum _vic_result
     VIC_BAD_BLOCK_SIZE,
     VIC_BAD_FLAGS,
     VIC_BAD_PBKDF_TYPE,
+    VIC_BAD_INTEGRITY_TYPE,
 }
 vic_result_t;
 
@@ -248,17 +249,6 @@ typedef struct _vic_luks_stat
 }
 vic_luks_stat_t;
 
-typedef enum vic_integrity
-{
-    VIC_INTEGRITY_NONE,
-    VIC_INTEGRITY_HMAC_AEAD,
-    VIC_INTEGRITY_HMAC_SHA256,
-    VIC_INTEGRITY_HMAC_SHA512,
-    VIC_INTEGRITY_CMAC_AES,
-    VIC_INTEGRITY_POLY1305,
-}
-vic_integrity_t;
-
 const char* vic_result_string(vic_result_t result);
 
 vic_result_t vic_luks_dump(vic_blockdev_t* device);
@@ -277,7 +267,7 @@ vic_result_t vic_luks_format(
     uint64_t mk_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    vic_integrity_t integrity);
+    const char* integrity);
 
 vic_result_t vic_luks_recover_master_key(
     vic_blockdev_t* device,

@@ -50,14 +50,10 @@ vic_result_t vic_read_integrity_sb(
 
 vic_result_t vic_dump_integrity_sb(const vic_integrity_sb_t* sb);
 
-const char* vic_integrity_name(vic_integrity_t integrity);
+bool vic_integrity_valid(const char* integrity);
 
-size_t vic_integrity_tag_size(vic_integrity_t integrity);
+size_t vic_integrity_tag_size(const char* integrity);
 
-vic_integrity_t vic_integrity_enum(const char* str);
-
-size_t vic_integrity_tag_size_from_str(const char* integrity);
-
-size_t vic_integrity_key_size_from_str(const char* integrity);
+size_t vic_integrity_key_size(const char* integrity);
 
 #endif /* _VIC_INTEGRITY_H */

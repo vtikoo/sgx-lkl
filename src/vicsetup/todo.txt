@@ -7,8 +7,6 @@
 
     (B) Support verity block sizes other than 4096
 
-    (B) Cleanup verity helper functions.
-
     (B) Get rid of vic_key_t type
 
     (B) Add logging facility

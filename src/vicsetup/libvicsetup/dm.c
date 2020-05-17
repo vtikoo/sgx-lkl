@@ -74,7 +74,7 @@ vic_result_t vic_dm_create_crypt(
         if (*integrity)
         {
             char capi[256];
-            size_t tag_size = vic_integrity_tag_size_from_str(integrity);
+            size_t tag_size = vic_integrity_tag_size(integrity);
 
             if (tag_size == (size_t)-1)
                 RAISE(VIC_UNEXPECTED);
@@ -199,7 +199,7 @@ vic_result_t vic_dm_create_integrity(
 
     /* Format the params */
     {
-        size_t tag_size = vic_integrity_tag_size_from_str(integrity);
+        size_t tag_size = vic_integrity_tag_size(integrity);
 
         if (tag_size == (size_t)-1)
             RAISE(VIC_UNEXPECTED);

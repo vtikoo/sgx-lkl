@@ -240,7 +240,7 @@ vic_result_t vic_luks_format(
     uint64_t mk_iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    uint32_t flags)
+    const char* integrity)
 {
     vic_result_t result = VIC_UNEXPECTED;
 
@@ -276,7 +276,7 @@ vic_result_t vic_luks_format(
             mk_iterations,
             master_key,
             master_key_bytes,
-            flags));
+            integrity));
     }
     else
     {

@@ -279,7 +279,6 @@ int crypt_format(
         const char* label = NULL;
         const char* subsystem = NULL;
         uint64_t iterations = 0;
-        vic_integrity_t integrity = VIC_INTEGRITY_NONE;
         vic_result_t r;
         int n;
 
@@ -297,14 +296,8 @@ int crypt_format(
             label = p->label;
             subsystem = p->subsystem;
 
-            if (p->integrity)
-            {
-                if ((integrity = vic_integrity_enum(
-                    p->integrity)) == VIC_INTEGRITY_NONE)
-                {
-                    ERAISE(EINVAL);
-                }
-            }
+            if (p->integrity && !vic_integrity_valid(p->integrity))
+                ERAISE(EINVAL);
 
             if (p->pbkdf)
             {
@@ -333,7 +326,7 @@ int crypt_format(
             iterations,
             (const vic_key_t*)volume_key,
             volume_key_size,
-            integrity)) != VIC_OK)
+            p->integrity)) != VIC_OK)
         {
             ERAISE(EINVAL);
         }

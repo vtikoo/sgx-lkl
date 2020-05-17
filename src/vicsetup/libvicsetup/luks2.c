@@ -2621,7 +2621,7 @@ static vic_result_t _initialize_hdr(
     const char* uuid,
     const char* hash,
     uint64_t iterations,
-    vic_integrity_t integrity)
+    const char* integrity)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks2_ext_hdr_t* p = NULL;
@@ -2706,16 +2706,13 @@ static vic_result_t _initialize_hdr(
 
         s.offset = (2 * hdr_size) + keyslots_size;
 
-        /* integrity object */
-        if (integrity != VIC_INTEGRITY_NONE)
+        /* Handle integrity parameter */
+        if (integrity)
         {
-            const char* name;
-            size_t size = sizeof(s.integrity.type);
+            if (!vic_integrity_valid(integrity))
+                RAISE(VIC_BAD_INTEGRITY_TYPE);
 
-            if (!(name = vic_integrity_name(integrity)))
-                RAISE(VIC_UNEXPECTED);
-
-            if (vic_strlcpy(s.integrity.type, name, size) >= size)
+            if (STRLCPY(s.integrity.type, integrity) != 0)
                 RAISE(VIC_BUFFER_TOO_SMALL);
 
             strcpy(s.integrity.journal_encryption, "none");
@@ -3197,7 +3194,7 @@ vic_result_t luks2_format(
     uint64_t iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    vic_integrity_t integrity)
+    const char* integrity)
 {
     vic_result_t result = VIC_UNEXPECTED;
     luks2_ext_hdr_t* ext = NULL;
@@ -3549,7 +3546,7 @@ vic_result_t luks2_add_key(
         &index));
 
     /* The area key excludes the integrity key suffix (if any) */
-    area_key_size = key_size - vic_integrity_key_size_from_str(
+    area_key_size = key_size - vic_integrity_key_size(
         ext->segments[0].integrity.type);
 
     if (!keyslot_cipher)
@@ -3644,7 +3641,7 @@ vic_result_t luks2_add_key_by_master_key(
         RAISE(VIC_HEADER_READ_FAILED);
 
     /* The area key excludes the integrity key suffix (if any) */
-    area_key_size = master_key_bytes - vic_integrity_key_size_from_str(
+    area_key_size = master_key_bytes - vic_integrity_key_size(
         ext->segments[0].integrity.type);
 
     /* Add a new key slot */

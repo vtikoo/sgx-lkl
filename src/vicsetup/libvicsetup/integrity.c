@@ -84,65 +84,26 @@ done:
     return result;
 }
 
-const char* vic_integrity_name(vic_integrity_t integrity)
+bool vic_integrity_valid(const char* integrity)
 {
-    switch(integrity)
-    {
-        case VIC_INTEGRITY_NONE:
-            return "none";
-        case VIC_INTEGRITY_HMAC_AEAD:
-            return "aead";
-        case VIC_INTEGRITY_HMAC_SHA256:
-            return "hmac(sha256)";
-        case VIC_INTEGRITY_HMAC_SHA512:
-            return "hmac(sha512)";
-        case VIC_INTEGRITY_CMAC_AES:
-            return "cmac(aes)";
-        case VIC_INTEGRITY_POLY1305:
-            return "poly1305";
-    }
+    if (!integrity)
+        return false;
 
-    return NULL;
+    if (strcmp(integrity, "aead") == 0)
+        return true;
+    else if (strcmp(integrity, "hmac(sha256)") == 0)
+        return true;
+    else if (strcmp(integrity, "hmac(sha512)") == 0)
+        return true;
+    else if (strcmp(integrity, "cmac(aes)") == 0)
+        return true;
+    else if (strcmp(integrity, "poly1305") == 0)
+        return true;
+
+    return false;
 }
 
-size_t vic_integrity_tag_size(vic_integrity_t integrity)
-{
-    switch(integrity)
-    {
-        case VIC_INTEGRITY_NONE:
-            return 0;
-        case VIC_INTEGRITY_HMAC_AEAD:
-            return 16;
-        case VIC_INTEGRITY_HMAC_SHA256:
-            return 32;
-        case VIC_INTEGRITY_HMAC_SHA512:
-            return 64;
-        case VIC_INTEGRITY_CMAC_AES:
-            return 16;
-        case VIC_INTEGRITY_POLY1305:
-            return 16;
-    }
-
-    return 0;
-}
-
-vic_integrity_t vic_integrity_enum(const char* str)
-{
-    if (strcmp(str, "aead") == 0)
-        return VIC_INTEGRITY_HMAC_AEAD;
-    else if (strcmp(str, "hmac(sha256)") == 0)
-        return VIC_INTEGRITY_HMAC_SHA256;
-    else if (strcmp(str, "hmac(sha512)") == 0)
-        return VIC_INTEGRITY_HMAC_SHA512;
-    else if (strcmp(str, "cmac(aes)") == 0)
-        return VIC_INTEGRITY_CMAC_AES;
-    else if (strcmp(str, "poly1305") == 0)
-        return VIC_INTEGRITY_POLY1305;
-
-    return VIC_INTEGRITY_NONE;
-}
-
-size_t vic_integrity_tag_size_from_str(const char* integrity)
+size_t vic_integrity_tag_size(const char* integrity)
 {
     if (!integrity)
         return (size_t)-1;
@@ -161,7 +122,7 @@ size_t vic_integrity_tag_size_from_str(const char* integrity)
     return (size_t)-1;
 }
 
-size_t vic_integrity_key_size_from_str(const char* integrity)
+size_t vic_integrity_key_size(const char* integrity)
 {
     if (!integrity)
         return 0;

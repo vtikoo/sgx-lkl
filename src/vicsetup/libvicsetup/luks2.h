@@ -188,7 +188,7 @@ vic_result_t luks2_format(
     uint64_t iterations,
     const vic_key_t* master_key,
     size_t master_key_bytes,
-    vic_integrity_t integrity);
+    const char* integrity);
 
 vic_result_t luks2_add_key(
     vic_blockdev_t* device,
