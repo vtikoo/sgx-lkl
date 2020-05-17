@@ -22,4 +22,7 @@
 
 #define VIC_STRLIT(STR) STR, sizeof(STR)-1
 
+#define VIC_PACK_BEGIN _Pragma("pack(push, 1)")
+#define VIC_PACK_END _Pragma("pack(pop)")
+
 #endif /* _VIC_DEFS_H */

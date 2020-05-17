@@ -9,6 +9,10 @@
 
     (B) Cleanup verity helper functions.
 
+    (B) Get rid of vic_key_t type
+
+    (B) Add logging facility
+
     XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     (X) Finish libcryptsetup.h

@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "crypto.h"
 #include "device.h"
+#include "verity.h"
 
 #define MAGIC 0xa8ea23c6
 
