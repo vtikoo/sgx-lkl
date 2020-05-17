@@ -12,7 +12,7 @@
 
 #define DEFAULT_BLOCK_SIZE 512
 
-#define MAGIC 0x0123456789ABCDEF
+#define MAGIC 0xf3fcef718ce744bd
 
 typedef struct _blockdev
 {

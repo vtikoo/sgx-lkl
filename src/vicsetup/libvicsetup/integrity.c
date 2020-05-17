@@ -1,8 +1,7 @@
-#include "integrity.h"
-
 #include <stdio.h>
 #include <string.h>
 
+#include "integrity.h"
 #include "raise.h"
 
 // Layout: SB | JOURNAL | [ DATA | TAGS ]*
