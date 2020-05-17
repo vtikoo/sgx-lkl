@@ -1,6 +1,7 @@
-#include "crypto.h"
-
 #include <string.h>
+#include <sys/time.h>
+#include <assert.h>
+
 #include <mbedtls/pkcs5.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/cipher.h>
@@ -8,11 +9,11 @@
 #include <mbedtls/sha256.h>
 #include <mbedtls/sha512.h>
 #include <mbedtls/base64.h>
-#include "argon2/include/argon2.h"
 
+#include "argon2/include/argon2.h"
+#include "crypto.h"
 #include "hash.h"
 #include "byteorder.h"
-#include "rdrand.h"
 
 #define GOTO(LABEL)                                                       \
     do                                                                    \
@@ -23,7 +24,31 @@
     }                                                                     \
     while (0)
 
-void vic_luks_random(void* data, size_t size)
+/* Disable this to use Valgrind where RDRAND is an illegal instruction */
+//#define USE_RDRAND
+
+#ifdef USE_RDRAND
+static uint64_t _rand(void)
+{
+    uint64_t r;
+    __asm__ volatile("rdrand %%rax\n\t" "mov %%rax, %0\n\t" : "=m"(r));
+    return r;
+}
+#else
+static uint64_t _rand(void)
+{
+    static uint64_t _seed1 = 0x22a96be5cd554564;
+    static uint64_t _seed2 = 0xf0a54f1c1f194d2d;
+
+    struct timeval tv;
+    int rc = gettimeofday(&tv, NULL);
+    assert(rc == 0);
+
+    return (_seed1++ ^ _seed2--) + (tv.tv_usec + tv.tv_sec);
+}
+#endif
+
+void vic_random(void* data, size_t size)
 {
     size_t r = size;
     uint8_t* p = (uint8_t*)data;
@@ -32,7 +57,7 @@ void vic_luks_random(void* data, size_t size)
 
     while (r >= sizeof(uint64_t))
     {
-        uint64_t x = vic_rdrand();
+        uint64_t x = _rand();
         memcpy(p, &x, sizeof(uint64_t));
         r -= sizeof(uint64_t);
         p += sizeof(uint64_t);
@@ -40,12 +65,12 @@ void vic_luks_random(void* data, size_t size)
 
     if (r)
     {
-        uint64_t x = vic_rdrand();
+        uint64_t x = _rand();
         memcpy(p, &x, r);
     }
 }
 
-int vic_luks_pbkdf2(
+int vic_pbkdf2(
     const void* password,
     size_t password_size,
     const uint8_t* salt,
@@ -184,7 +209,7 @@ done:
     return ret;
 }
 
-int vic_luks_af_merge(
+int vic_afmerge(
     uint64_t key_bytes,
     uint64_t stripes,
     const char* hash_spec,
@@ -217,7 +242,7 @@ int vic_luks_af_merge(
     return 0;
 }
 
-int vic_luks_argon2i(
+int vic_argon2i(
     const void* password,
     size_t password_size,
     const uint8_t* salt,
@@ -263,7 +288,7 @@ done:
     return ret;
 }
 
-int vic_luks_argon2id(
+int vic_argon2id(
     const void* password,
     size_t password_size,
     const uint8_t* salt,
@@ -335,7 +360,7 @@ done:
     return ret;
 }
 
-int vic_luks_af_split(
+int vic_afsplit(
     const char* hash_spec,
     const vic_key_t* key,
     size_t key_size,
@@ -350,7 +375,7 @@ int vic_luks_af_split(
 
     memset(&prev, 0, sizeof(prev));
 
-    vic_luks_random(split_key, key_size * stripes);
+    vic_random(split_key, key_size * stripes);
 
     if (_gen_split_material(
         hash_spec, split_key, prev.buf, key_size, stripes) != 0)

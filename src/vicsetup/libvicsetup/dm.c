@@ -1,10 +1,9 @@
-#include "dm.h"
-
 #include <libdevmapper.h>
 #include <limits.h>
 #include <unistd.h>
 #include <time.h>
 
+#include "dm.h"
 #include "vic.h"
 #include "raise.h"
 #include "strings.h"

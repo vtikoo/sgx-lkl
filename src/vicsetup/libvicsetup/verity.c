@@ -120,7 +120,7 @@ vic_result_t vic_verity_format(
     if (!salt)
     {
         salt_size = hsize;
-        vic_luks_random(salt_buf, salt_size);
+        vic_random(salt_buf, salt_size);
         salt = salt_buf;
     }
 

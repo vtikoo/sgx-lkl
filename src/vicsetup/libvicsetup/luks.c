@@ -1,5 +1,3 @@
-#include "vic.h"
-
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -8,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "vic.h"
 #include "lukscommon.h"
 #include "byteorder.h"
 #include "luks2.h"

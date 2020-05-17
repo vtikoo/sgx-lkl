@@ -1,5 +1,3 @@
-#include "luks2.h"
-
 #include <mbedtls/pkcs5.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/cipher.h>
@@ -24,6 +22,7 @@
 #include <linux/fs.h>
 #include <json.h>
 
+#include "luks2.h"
 #include "vic.h"
 #include "byteorder.h"
 #include "strings.h"
@@ -2322,7 +2321,7 @@ static vic_result_t _find_key_by_pwd(
 
         if (strcmp(ks->kdf.type, "pbkdf2") == 0)
         {
-            if (vic_luks_pbkdf2(
+            if (vic_pbkdf2(
                 pwd,
                 pwd_size,
                 ks->kdf.salt,
@@ -2337,7 +2336,7 @@ static vic_result_t _find_key_by_pwd(
         }
         else if (strcmp(ks->kdf.type, "argon2i") == 0)
         {
-            if (vic_luks_argon2i(
+            if (vic_argon2i(
                 pwd,
                 pwd_size,
                 ks->kdf.salt,
@@ -2353,7 +2352,7 @@ static vic_result_t _find_key_by_pwd(
         }
         else if (strcmp(ks->kdf.type, "argon2id") == 0)
         {
-            if (vic_luks_argon2id(
+            if (vic_argon2id(
                 pwd,
                 pwd_size,
                 ks->kdf.salt,
@@ -2397,7 +2396,7 @@ static vic_result_t _find_key_by_pwd(
             RAISE(VIC_DECRYPT_FAILED);
         }
 
-        if (vic_luks_af_merge(
+        if (vic_afmerge(
             ks->key_size,
             ks->af.stripes,
             ks->af.hash,
@@ -2415,7 +2414,7 @@ static vic_result_t _find_key_by_pwd(
 
         if (strcmp(digest->type, "pbkdf2") == 0)
         {
-            if (vic_luks_pbkdf2(
+            if (vic_pbkdf2(
                 &mk,
                 ks->key_size,
                 digest->salt,
@@ -2595,7 +2594,7 @@ static int _init_keyslot(
     vic_strlcpy(ks.af.hash, pbkdf2_hash, sizeof(ks.af.hash));
     vic_strlcpy(ks.area.encryption, keyslot_cipher, sizeof(ks.area.encryption));
 
-    vic_luks_random(ks.kdf.salt, sizeof(ks.kdf.salt));
+    vic_random(ks.kdf.salt, sizeof(ks.kdf.salt));
 
 #if 0
     if ((ks.kdf.cpus = vic_num_cpus()) == (uint64_t)-1)
@@ -2667,7 +2666,7 @@ static vic_result_t _initialize_hdr(
         p->phdr.hdr_size = hdr_size;
 
         /* hdr.salt */
-        vic_luks_random(p->phdr.salt, sizeof(p->phdr.salt));
+        vic_random(p->phdr.salt, sizeof(p->phdr.salt));
 
         /* hdr.uuid */
         strcpy(p->phdr.uuid, uuid);
@@ -2737,9 +2736,9 @@ static vic_result_t _initialize_hdr(
 
         vic_strlcpy(d.hash, hash, sizeof(d.hash));
 
-        vic_luks_random(d.salt, sizeof(d.salt));
+        vic_random(d.salt, sizeof(d.salt));
 
-        if (vic_luks_pbkdf2(
+        if (vic_pbkdf2(
             key->buf,
             key_size,
             d.salt,
@@ -2845,7 +2844,7 @@ static vic_result_t _generate_key_material(
 
     if (strcmp(ks->kdf.type, "pbkdf2") == 0)
     {
-        if (vic_luks_pbkdf2(
+        if (vic_pbkdf2(
             pwd,
             pwd_size,
             ks->kdf.salt,
@@ -2860,7 +2859,7 @@ static vic_result_t _generate_key_material(
     }
     else if (strcmp(ks->kdf.type, "argon2i") == 0)
     {
-        if (vic_luks_argon2i(
+        if (vic_argon2i(
             pwd,
             pwd_size,
             ks->kdf.salt,
@@ -2876,7 +2875,7 @@ static vic_result_t _generate_key_material(
     }
     else if (strcmp(ks->kdf.type, "argon2id") == 0)
     {
-        if (vic_luks_argon2id(
+        if (vic_argon2id(
             pwd,
             pwd_size,
             ks->kdf.salt,
@@ -2891,7 +2890,7 @@ static vic_result_t _generate_key_material(
         }
     }
 
-    if (vic_luks_af_split(
+    if (vic_afsplit(
         ks->af.hash,
         key,
         ks->key_size,
@@ -3231,7 +3230,7 @@ vic_result_t luks2_format(
     if (!master_key)
     {
         /* Randomly generate a master key */
-        vic_luks_random(&master_key_buf, sizeof(master_key_buf));
+        vic_random(&master_key_buf, sizeof(master_key_buf));
         master_key = &master_key_buf;
         master_key_bytes = sizeof(master_key_buf);
     }

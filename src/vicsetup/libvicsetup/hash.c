@@ -1,5 +1,3 @@
-#include "hash.h"
-
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/sha512.h>
@@ -7,6 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "hash.h"
 #include "defs.h"
 
 VIC_STATIC_ASSERT(

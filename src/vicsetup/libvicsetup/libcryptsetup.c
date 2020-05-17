@@ -234,7 +234,7 @@ int crypt_format(
     else
     {
         /* Save in crypt device for later (used when adding keyslots) */
-        vic_luks_random(&cd->volume_key, volume_key_size);
+        vic_random(&cd->volume_key, volume_key_size);
         cd->volume_key_size = volume_key_size;
         volume_key = (const char*)cd->volume_key.buf;
     }

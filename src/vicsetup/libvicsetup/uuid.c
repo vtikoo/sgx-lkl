@@ -14,7 +14,7 @@ void vic_uuid_generate(char uuid[VIC_UUID_STRING_SIZE])
     const uint8_t* src = bytes;
     char* dest = uuid;
 
-    vic_luks_random(bytes, sizeof(bytes));
+    vic_random(bytes, sizeof(bytes));
 
     memset(uuid, 0, VIC_UUID_STRING_SIZE);
 

@@ -295,7 +295,7 @@ static int luksFormat(int argc, const char* argv[])
     if (!key)
     {
         key = &key_buf;
-        vic_luks_random(&key_buf, sizeof(key_buf));
+        vic_random(&key_buf, sizeof(key_buf));
         key_size = sizeof(key_buf);
     }
 
@@ -455,7 +455,7 @@ static int cryptsetupLuksFormat(int argc, const char* argv[])
     if (!key)
     {
         key = &key_buf;
-        vic_luks_random(&key_buf, sizeof(key_buf));
+        vic_random(&key_buf, sizeof(key_buf));
         key_size = sizeof(key_buf);
     }
 #endif

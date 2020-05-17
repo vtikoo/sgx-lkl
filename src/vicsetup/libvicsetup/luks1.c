@@ -1,5 +1,3 @@
-#include "luks1.h"
-
 #include <mbedtls/pkcs5.h>
 #include <mbedtls/aes.h>
 #include <mbedtls/cipher.h>
@@ -16,12 +14,13 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <ctype.h>
+
+#include "luks1.h"
 #include "vic.h"
 #include "byteorder.h"
 #include "strings.h"
 #include "hash.h"
 #include "lukscommon.h"
-#include "rdrand.h"
 #include "hexdump.h"
 #include "raise.h"
 #include "crypto.h"
@@ -710,12 +709,12 @@ static int _initialize_hdr(
     hdr->key_bytes = master_key_bytes;
 
     /* Randomly generate the digest salt */
-    vic_luks_random(hdr->mk_digest_salt, sizeof(hdr->mk_digest_salt));
+    vic_random(hdr->mk_digest_salt, sizeof(hdr->mk_digest_salt));
 
     hdr->mk_digest_iter = mk_iterations;
 
     /* Derive the digest from the master key and the salt */
-    if (vic_luks_pbkdf2(
+    if (vic_pbkdf2(
         master_key->buf,
         master_key_bytes,
         hdr->mk_digest_salt,
@@ -824,7 +823,7 @@ static int _add_key(
     ks = &hdr->keyslots[index];
     ks->active = LUKS_KEY_ENABLED;
     ks->iterations = slot_iterations;
-    vic_luks_random(ks->salt, LUKS_SALT_SIZE);
+    vic_random(ks->salt, LUKS_SALT_SIZE);
 
     if ((size = hdr->key_bytes * ks->stripes) == 0)
         GOTO(done);
@@ -835,7 +834,7 @@ static int _add_key(
     if (!(cipher = calloc(1, size)))
         GOTO(done);
 
-    if (vic_luks_pbkdf2(
+    if (vic_pbkdf2(
         (const uint8_t*)pwd,
         pwd_size,
         ks->salt,
@@ -848,7 +847,7 @@ static int _add_key(
         GOTO(done);
     }
 
-    if (vic_luks_af_split(
+    if (vic_afsplit(
         hdr->hash_spec,
         master_key,
         hdr->key_bytes,
@@ -917,7 +916,7 @@ static vic_result_t _find_key_by_pwd(
 
             vic_luks_keyslot_t* ks = &hdr->keyslots[i];
 
-            if (vic_luks_pbkdf2(
+            if (vic_pbkdf2(
                 (const uint8_t*)pwd,
                 pwd_size,
                 ks->salt,
@@ -944,7 +943,7 @@ static vic_result_t _find_key_by_pwd(
             if (_decrypt(hdr, &pbkdf2_key, cipher, plain, size, 0) != 0)
                 RAISE(VIC_DECRYPT_FAILED);
 
-            if (vic_luks_af_merge(
+            if (vic_afmerge(
                 hdr->key_bytes,
                 ks->stripes,
                 hdr->hash_spec,
@@ -954,7 +953,7 @@ static vic_result_t _find_key_by_pwd(
                 RAISE(VIC_AFMERGE_FAILED);
             }
 
-            if (vic_luks_pbkdf2(
+            if (vic_pbkdf2(
                 &mk,
                 hdr->key_bytes,
                 hdr->mk_digest_salt,
@@ -1048,7 +1047,7 @@ vic_result_t luks1_format(
     if (!master_key)
     {
         /* Randomly generate a master key */
-        vic_luks_random(&master_key_buf, sizeof(master_key_buf));
+        vic_random(&master_key_buf, sizeof(master_key_buf));
         master_key = &master_key_buf;
         master_key_bytes = sizeof(master_key_buf);
     }
@@ -1378,7 +1377,7 @@ vic_result_t luks1_change_key(
     CHECK(_find_key_by_pwd(device, hdr, old_pwd, old_pwd_size, &mk, &ks));
 
     /* Generate a new salt for this key slot */
-    vic_luks_random(ks->salt, sizeof(ks->salt));
+    vic_random(ks->salt, sizeof(ks->salt));
 
     if ((size = hdr->key_bytes * ks->stripes) == 0)
         GOTO(done);
@@ -1389,7 +1388,7 @@ vic_result_t luks1_change_key(
     if (!(cipher = calloc(1, size)))
         GOTO(done);
 
-    if (vic_luks_pbkdf2(
+    if (vic_pbkdf2(
         (const uint8_t*)new_pwd,
         new_pwd_size,
         ks->salt,
@@ -1402,7 +1401,7 @@ vic_result_t luks1_change_key(
         GOTO(done);
     }
 
-    if (vic_luks_af_split(
+    if (vic_afsplit(
         hdr->hash_spec,
         &mk,
         hdr->key_bytes,

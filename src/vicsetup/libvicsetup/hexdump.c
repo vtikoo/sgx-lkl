@@ -1,9 +1,8 @@
-#include "hexdump.h"
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
+#include "hexdump.h"
 #include "raise.h"
 
 static void _indent(size_t indent)

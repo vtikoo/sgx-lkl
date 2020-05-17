@@ -6,9 +6,9 @@
 
 #include "vic.h"
 
-void vic_luks_random(void* data, size_t size);
+void vic_random(void* data, size_t size);
 
-int vic_luks_pbkdf2(
+int vic_pbkdf2(
     const void* password,
     size_t password_size,
     const uint8_t* salt,
@@ -18,7 +18,7 @@ int vic_luks_pbkdf2(
     void* key,
     size_t key_size);
 
-int vic_luks_argon2i(
+int vic_argon2i(
     const void* password,
     size_t password_size,
     const uint8_t* salt,
@@ -29,7 +29,7 @@ int vic_luks_argon2i(
     void* key,
     size_t key_size);
 
-int vic_luks_argon2id(
+int vic_argon2id(
     const void* password,
     size_t password_size,
     const uint8_t* salt,
@@ -40,14 +40,14 @@ int vic_luks_argon2id(
     void* key,
     size_t key_size);
 
-int vic_luks_af_merge(
+int vic_afmerge(
     uint64_t key_bytes,
     uint64_t stripes,
     const char* hash_spec,
     const uint8_t* split_key,
     vic_key_t* key);
 
-int vic_luks_af_split(
+int vic_afsplit(
     const char* hash_spec,
     const vic_key_t* key,
     size_t key_size,
