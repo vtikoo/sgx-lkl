@@ -153,7 +153,7 @@ vic_result_t vic_loop_map(
     char path_out[PATH_MAX],
     bool readonly)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     struct stat st;
 
     if (!path || !path_out)
@@ -172,8 +172,6 @@ vic_result_t vic_loop_map(
         if (vic_loop_attach(path, 0, readonly, false, path_out) != 0)
             RAISE(VIC_FAILED_TO_GET_LOOP_DEVICE);
     }
-
-    result = VIC_OK;
 
 done:
     return result;

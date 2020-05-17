@@ -28,7 +28,7 @@ vic_result_t vic_dm_create_crypt(
     uint64_t iv_offset,
     uint64_t offset)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     char params[1024];
     struct dm_task* dmt = NULL;
     char* hexkey = NULL;
@@ -142,8 +142,6 @@ vic_result_t vic_dm_create_crypt(
             RAISE(VIC_FAILED);
     }
 
-    result = VIC_OK;
-
 done:
 
     if (hexkey)
@@ -167,7 +165,7 @@ vic_result_t vic_dm_create_integrity(
     char mode,
     const char* integrity)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     char params[1024];
     struct dm_task* dmt = NULL;
     char* hexkey = NULL;
@@ -249,8 +247,6 @@ vic_result_t vic_dm_create_integrity(
             RAISE(VIC_FAILED);
     }
 
-    result = VIC_OK;
-
 done:
 
     if (hexkey)
@@ -280,7 +276,7 @@ vic_result_t vic_dm_create_verity(
     const uint8_t* salt,
     size_t salt_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     char params[2048];
     struct dm_task* dmt = NULL;
     char data_dev_path[PATH_MAX];
@@ -380,8 +376,6 @@ vic_result_t vic_dm_create_verity(
             RAISE(VIC_FAILED);
     }
 
-    result = VIC_OK;
-
 done:
 
     if (root_digest_ascii)
@@ -401,7 +395,7 @@ done:
 
 vic_result_t vic_dm_remove(const char* name)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     struct dm_task* dmt = NULL;
     const size_t max_retries = 10;
 
@@ -429,8 +423,6 @@ vic_result_t vic_dm_remove(const char* name)
             break;
         }
     }
-
-    result = VIC_OK;
 
 done:
 

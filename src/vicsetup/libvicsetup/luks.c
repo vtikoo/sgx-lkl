@@ -89,7 +89,7 @@ done:
 
 vic_result_t vic_luks_dump(vic_blockdev_t* device)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
     luks1_hdr_t* hdr1 = NULL;
     luks2_hdr_t* hdr2 = NULL;
@@ -136,8 +136,6 @@ vic_result_t vic_luks_dump(vic_blockdev_t* device)
         RAISE(VIC_BAD_VERSION);
     }
 
-    result = VIC_OK;
-
 done:
 
     if (hdr1)
@@ -156,7 +154,7 @@ vic_result_t vic_luks_recover_master_key(
     vic_key_t* master_key,
     size_t* master_key_bytes)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
 
     if (!_is_valid_device(device))
@@ -188,8 +186,6 @@ vic_result_t vic_luks_recover_master_key(
         RAISE(VIC_BAD_VERSION);
     }
 
-    result = VIC_OK;
-
 done:
 
     return result;
@@ -200,7 +196,7 @@ static vic_result_t _split_cipher(
     char cipher_name[LUKS_CIPHER_NAME_SIZE],
     char cipher_mode[LUKS_CIPHER_MODE_SIZE])
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     size_t offset;
 
     if (!cipher | !cipher_name || !cipher_mode)
@@ -224,8 +220,6 @@ static vic_result_t _split_cipher(
 
     vic_strlcpy(cipher_mode, &cipher[offset+1], LUKS_CIPHER_MODE_SIZE);
 
-    result = VIC_OK;
-
 done:
     return result;
 }
@@ -241,7 +235,7 @@ vic_result_t vic_luks_format(
     size_t master_key_bytes,
     const char* integrity)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
 
     if (!cipher)
         cipher = LUKS_DEFAULT_CIPHER;
@@ -282,8 +276,6 @@ vic_result_t vic_luks_format(
         RAISE(VIC_BAD_VERSION);
     }
 
-    result = VIC_OK;
-
 done:
     return result;
 }
@@ -298,7 +290,7 @@ vic_result_t vic_luks_add_key(
     const char* new_pwd,
     size_t new_pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
 
     if (!_is_valid_device(device))
@@ -312,17 +304,17 @@ vic_result_t vic_luks_add_key(
         if (kdf_type && strcmp(kdf_type, "pbkdf2") != 0)
             RAISE(VIC_BAD_PARAMETER);
 
-        return luks1_add_key(
+        CHECK(luks1_add_key(
             device,
             kdf ? kdf->iterations : 0,
             pwd,
             pwd_size,
             new_pwd,
-            new_pwd_size);
+            new_pwd_size));
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_add_key(
+        CHECK(luks2_add_key(
             device,
             keyslot_cipher,
             kdf_type,
@@ -330,11 +322,11 @@ vic_result_t vic_luks_add_key(
             pwd,
             pwd_size,
             new_pwd,
-            new_pwd_size);
+            new_pwd_size));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
 
 done:
@@ -346,7 +338,7 @@ vic_result_t vic_luks_remove_key(
     const char* pwd,
     size_t pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
 
     if (!_is_valid_device(device))
@@ -357,15 +349,15 @@ vic_result_t vic_luks_remove_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_remove_key(device, pwd, pwd_size);
+        CHECK(luks1_remove_key(device, pwd, pwd_size));
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_remove_key(device, pwd, pwd_size);
+        CHECK(luks2_remove_key(device, pwd, pwd_size));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
 
 done:
@@ -379,7 +371,7 @@ vic_result_t vic_luks_change_key(
     const char* new_pwd,
     size_t new_pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
 
     if (!_is_valid_device(device))
@@ -390,17 +382,17 @@ vic_result_t vic_luks_change_key(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_change_key(device, old_pwd, old_pwd_size, new_pwd,
-            new_pwd_size);
+        CHECK(luks1_change_key(device, old_pwd, old_pwd_size, new_pwd,
+            new_pwd_size));
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_change_key(device, old_pwd, old_pwd_size, new_pwd,
-            new_pwd_size);
+        CHECK(luks2_change_key(device, old_pwd, old_pwd_size, new_pwd,
+            new_pwd_size));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
 
 done:
@@ -412,7 +404,7 @@ vic_result_t vic_luks_load_key(
     vic_key_t* key,
     size_t* key_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     struct stat st;
     FILE* is = NULL;
 
@@ -433,8 +425,6 @@ vic_result_t vic_luks_load_key(
 
     *key_size = st.st_size;
 
-    result = VIC_OK;
-
 done:
 
     if (is)
@@ -445,7 +435,7 @@ done:
 
 vic_result_t vic_luks_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
 
     if (!_is_valid_device(device))
@@ -456,15 +446,15 @@ vic_result_t vic_luks_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_stat(device, buf);
+        CHECK(luks1_stat(device, buf));
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_stat(device, buf);
+        CHECK(luks2_stat(device, buf));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
 
 done:
@@ -477,7 +467,7 @@ vic_result_t vic_luks_open(
     const vic_key_t* master_key,
     size_t master_key_bytes)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
     vic_blockdev_t* device = NULL;
 
@@ -491,15 +481,15 @@ vic_result_t vic_luks_open(
 
     if (hdr.version == LUKS_VERSION_1)
     {
-        return luks1_open(device, path, name, master_key, master_key_bytes);
+        CHECK(luks1_open(device, path, name, master_key, master_key_bytes));
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_open(device, path, name, master_key, master_key_bytes);
+        CHECK(luks2_open(device, path, name, master_key, master_key_bytes));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
 
 done:
@@ -512,7 +502,7 @@ done:
 
 vic_result_t vic_luks_close(const char* name)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
 
     if (!name)
         RAISE(VIC_BAD_PARAMETER);
@@ -536,8 +526,6 @@ vic_result_t vic_luks_close(const char* name)
             CHECK(vic_dm_remove(name_dif));
     }
 
-    result = VIC_OK;
-
 done:
     return result;
 }
@@ -553,7 +541,7 @@ vic_result_t vic_luks_add_key_by_master_key(
     const char* pwd,
     size_t pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_luks_hdr_t hdr;
 
     if (!_is_valid_device(device))
@@ -567,17 +555,17 @@ vic_result_t vic_luks_add_key_by_master_key(
         if (kdf_type && strcmp(kdf_type, "pbkdf2") != 0)
             RAISE(VIC_BAD_PARAMETER);
 
-        return luks1_add_key_by_master_key(
+        CHECK(luks1_add_key_by_master_key(
             device,
             kdf ? kdf->iterations : 0,
             master_key,
             master_key_bytes,
             pwd,
-            pwd_size);
+            pwd_size));
     }
     else if (hdr.version == LUKS_VERSION_2)
     {
-        return luks2_add_key_by_master_key(
+        CHECK(luks2_add_key_by_master_key(
             device,
             keyslot_cipher,
             kdf_type,
@@ -585,11 +573,11 @@ vic_result_t vic_luks_add_key_by_master_key(
             master_key,
             master_key_bytes,
             pwd,
-            pwd_size);
+            pwd_size));
     }
     else
     {
-        return VIC_BAD_VERSION;
+        RAISE(VIC_BAD_VERSION);
     }
 
 done:
