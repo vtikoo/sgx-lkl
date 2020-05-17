@@ -211,6 +211,8 @@ vic_result_t vic_blockdev_same(
 
 vic_result_t vic_blockdev_close(vic_blockdev_t* dev);
 
+size_t vic_blockdev_get_size_from_path(const char* path);
+
 /*
 **==============================================================================
 **

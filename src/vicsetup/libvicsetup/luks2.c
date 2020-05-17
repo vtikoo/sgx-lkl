@@ -34,7 +34,6 @@
 #include "trace.h"
 #include "dm.h"
 #include "integrity.h"
-#include "device.h"
 #include "round.h"
 
 /*
@@ -3091,7 +3090,7 @@ static vic_result_t _open_integrity_luks2_device(
     vic_integrity_sb_t sb;
 
     /* Get the size of the block device */
-    if ((size = vic_get_device_size(path)) == (size_t)-1)
+    if ((size = vic_blockdev_get_size_from_path(path)) == (size_t)-1)
         RAISE(VIC_FAILED);
 
     /* Read the super block */
@@ -3143,7 +3142,7 @@ static vic_result_t _wipe_device(const char* path)
     }
 
     /* Get the device size in bytes */
-    if ((size = vic_get_device_size(path)) == (size_t)-1)
+    if ((size = vic_blockdev_get_size_from_path(path)) == (size_t)-1)
         RAISE(VIC_FAILED);
 
     /* Determine the number of blocks */
