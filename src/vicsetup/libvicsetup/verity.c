@@ -313,7 +313,6 @@ vic_result_t vic_verity_format(
             {
                 assert((write_offset % blk_sz) == 0);
                 const size_t blkno = write_offset / blk_sz;
-                /* ATTN: this writes the wrong data here */
                 CHECK(vic_blockdev_put(hash_dev, blkno, node, 1));
                 memcpy(last_node, node, sizeof(last_node));
                 write_offset += blk_sz;

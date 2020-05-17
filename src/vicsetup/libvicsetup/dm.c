@@ -203,7 +203,7 @@ vic_result_t vic_dm_create_integrity(
         if (tag_size == (size_t)-1)
             RAISE(VIC_UNEXPECTED);
 
-        /* ATTN: hard-coded for now */
+        /* ATTN: hard-coded block size */
         uint64_t block_size = 512;
 
         int n = snprintf(

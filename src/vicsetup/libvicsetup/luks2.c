@@ -2681,7 +2681,7 @@ static vic_result_t _initialize_hdr(
         /* Calcualte the keyslots size */
         keyslots_size = OVERHEAD_BYTES - hdr_sizes;
 
-/* ATTN: tests this */
+/* ATTN: test this */
 #if 0
         /* Verify that keyslots_size is big enough */
         if (keyslots_size < LUKS2_NUM_KEYSLOTS * area_size)

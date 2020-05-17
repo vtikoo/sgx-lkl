@@ -285,10 +285,7 @@ static const mbedtls_cipher_info_t* _get_cipher_info(const luks1_hdr_t* hdr)
 
     /* ATTN: Only AES is supported */
     if (strcmp(hdr->cipher_name, LUKS_CIPHER_NAME_AES) != 0)
-    {
-        /* ATTN: unsupported */
         return NULL;
-    }
 
     key_bits = hdr->key_bytes * 8;
 
@@ -337,10 +334,6 @@ static const mbedtls_cipher_info_t* _get_cipher_info(const luks1_hdr_t* hdr)
     }
     else
     {
-#if 1
-        printf("UNSUPPORTED: {%s}{%s}\n", hdr->cipher_name, hdr->cipher_mode);
-#endif
-        /* ATTN: unsupported */
         return NULL;
     }
 
@@ -443,7 +436,10 @@ static int _crypt(
     mbedtls_cipher_init(&ctx);
 
     if (!(ci = _get_cipher_info(hdr)))
+    {
+        /* ATTN: unsupported cipher */
         GOTO(done);
+    }
 
     if (mbedtls_cipher_setup(&ctx, ci) != 0)
         GOTO(done);
@@ -1067,7 +1063,6 @@ vic_result_t luks1_format(
         uuid,
         mk_iterations) != 0)
     {
-        /* ATTN: be more specific */
         RAISE(VIC_FAILED);
     }
 
@@ -1161,14 +1156,12 @@ vic_result_t luks1_add_key(
 
     if (vic_luks_recover_master_key(device, pwd, pwd_size, &mk, NULL) != 0)
     {
-        /* ATTN: be more specific */
         RAISE(VIC_FAILED);
     }
 
     if (_add_key(hdr, &mk, new_pwd, new_pwd_size, slot_iterations, &data,
         &size, &index) != 0)
     {
-        /* ATTN: be more specific */
         RAISE(VIC_FAILED);
     }
 
@@ -1235,7 +1228,6 @@ vic_result_t luks1_add_key_by_master_key(
         &size,
         &index) != 0)
     {
-        /* ATTN: be more specific */
         RAISE(VIC_FAILED);
     }
 
