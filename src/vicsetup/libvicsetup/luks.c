@@ -124,10 +124,10 @@ vic_result_t vic_luks_dump(vic_blockdev_t* device)
             const uint64_t offset = ext->segments[0].offset;
             vic_result_t r;
 
-            r = vic_read_integrity_sb(device, offset, &sb);
+            r = vic_integrity_read_sb(device, offset, &sb);
 
             if (r == VIC_OK)
-                vic_dump_integrity_sb(&sb);
+                vic_integrity_dump_sb(&sb);
             else if (r != VIC_NOT_FOUND)
                 RAISE(r);
         }

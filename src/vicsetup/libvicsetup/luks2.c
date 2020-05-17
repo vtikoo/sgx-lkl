@@ -3052,10 +3052,10 @@ static int _open_integrity_device(
     vic_integrity_sb_t sb;
 
     /* Read the super block */
-    CHECK(vic_read_integrity_sb(dev, ext->segments[0].offset, &sb));
+    CHECK(vic_integrity_read_sb(dev, ext->segments[0].offset, &sb));
 
 #if 0
-    vic_dump_integrity_sb(&sb);
+    vic_integrity_dump_sb(&sb);
 #endif
 
     /* Set the device size */
@@ -3097,7 +3097,7 @@ static vic_result_t _open_integrity_luks2_device(
         RAISE(VIC_FAILED);
 
     /* Read the super block */
-    CHECK(vic_read_integrity_sb(dev, ext->segments[0].offset, &sb));
+    CHECK(vic_integrity_read_sb(dev, ext->segments[0].offset, &sb));
 
     size /= VIC_SECTOR_SIZE;
 

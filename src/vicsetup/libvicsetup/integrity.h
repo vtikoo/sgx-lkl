@@ -43,12 +43,12 @@ typedef struct _vic_integrity_sb
 vic_integrity_sb_t;
 VIC_PACK_END
 
-vic_result_t vic_read_integrity_sb(
+vic_result_t vic_integrity_read_sb(
     vic_blockdev_t* device,
     uint64_t offset,
     vic_integrity_sb_t* sb);
 
-vic_result_t vic_dump_integrity_sb(const vic_integrity_sb_t* sb);
+vic_result_t vic_integrity_dump_sb(const vic_integrity_sb_t* sb);
 
 bool vic_integrity_valid(const char* integrity);
 

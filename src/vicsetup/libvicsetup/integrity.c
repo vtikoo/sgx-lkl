@@ -8,10 +8,6 @@
 // Layout: SB | JOURNAL | [ DATA | TAGS ]*
 //
 // SB is padded out to 4096
-// JOURNAL is 88 sectors?
-//
-// Example: assuming 32 byte tags (16 tags per sector):
-//     16 data sectors followed by one tag sector
 
 static uint8_t _magic[8] = { 'i', 'n', 't', 'e', 'g', 'r', 't', '\0' };
 
@@ -20,7 +16,7 @@ static uint64_t _inverse_log2(uint8_t log)
     return 1 << (uint64_t)log;
 }
 
-vic_result_t vic_read_integrity_sb(
+vic_result_t vic_integrity_read_sb(
     vic_blockdev_t* device,
     uint64_t offset,
     vic_integrity_sb_t* sb)
@@ -49,7 +45,7 @@ done:
     return result;
 }
 
-vic_result_t vic_dump_integrity_sb(const vic_integrity_sb_t* sb)
+vic_result_t vic_integrity_dump_sb(const vic_integrity_sb_t* sb)
 {
     vic_result_t result;
 
