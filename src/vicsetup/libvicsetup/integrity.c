@@ -20,7 +20,7 @@ vic_result_t vic_integrity_read_sb(
     uint64_t offset,
     vic_integrity_sb_t* sb)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     const uint64_t blkno = offset / VIC_SECTOR_SIZE;
     uint8_t blk[VIC_SECTOR_SIZE];
     size_t block_size;
@@ -37,8 +37,6 @@ vic_result_t vic_integrity_read_sb(
 
     if (memcmp(sb->magic, _magic, sizeof(sb->magic)) != 0)
         RAISE(VIC_NOT_FOUND);
-
-    result = VIC_OK;
 
 done:
     return result;

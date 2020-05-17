@@ -890,7 +890,7 @@ static vic_result_t _find_key_by_pwd(
     vic_key_t* master_key,
     vic_luks_keyslot_t** ks_out)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     bool found = false;
     void* cipher = NULL;
     void* plain = NULL;
@@ -984,12 +984,7 @@ static vic_result_t _find_key_by_pwd(
     }
 
     if (!found)
-    {
-        result = VIC_NOT_FOUND;
-        goto done;
-    }
-
-    result = VIC_OK;
+        RAISE(VIC_NOT_FOUND);
 
 done:
 
@@ -1020,7 +1015,7 @@ vic_result_t luks1_format(
     const vic_key_t* master_key,
     size_t master_key_bytes)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t hdr;
     vic_key_t master_key_buf;
     void* data = NULL;
@@ -1080,8 +1075,6 @@ vic_result_t luks1_format(
     if (_write_luks1_hdr(device, &hdr) != 0)
         RAISE(VIC_HEADER_WRITE_FAILED);
 
-    result = VIC_OK;
-
 done:
 
     if (data)
@@ -1097,7 +1090,7 @@ vic_result_t luks1_recover_master_key(
     vic_key_t* master_key,
     size_t* master_key_bytes)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
 
     if (!_is_valid_device(device))
@@ -1117,8 +1110,6 @@ vic_result_t luks1_recover_master_key(
     if (master_key_bytes)
         *master_key_bytes = hdr->key_bytes;
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1135,7 +1126,7 @@ vic_result_t luks1_add_key(
     const char* new_pwd,
     size_t new_pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
     vic_key_t mk;
     void* data = NULL;
@@ -1176,8 +1167,6 @@ vic_result_t luks1_add_key(
     if (_write_key_material(device, hdr, &hdr->keyslots[index], data) != 0)
         RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1197,7 +1186,7 @@ vic_result_t luks1_add_key_by_master_key(
     const char* pwd,
     size_t pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
     void* data = NULL;
     size_t size;
@@ -1242,8 +1231,6 @@ vic_result_t luks1_add_key_by_master_key(
     if (_write_key_material(device, hdr, &hdr->keyslots[index], data) != 0)
         RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1260,7 +1247,7 @@ vic_result_t luks1_remove_key(
     const char* pwd,
     size_t pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
     vic_luks_keyslot_t* ks;
 
@@ -1287,8 +1274,6 @@ vic_result_t luks1_remove_key(
     if (_write_key_material(device, hdr, ks, NULL) != 0)
         RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1299,7 +1284,7 @@ done:
 
 vic_result_t luks1_kill_slot(vic_blockdev_t* device, size_t index)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr;
     vic_luks_keyslot_t* ks;
 
@@ -1331,8 +1316,6 @@ vic_result_t luks1_kill_slot(vic_blockdev_t* device, size_t index)
             RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
     }
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1348,7 +1331,7 @@ vic_result_t luks1_change_key(
     const char* new_pwd,
     size_t new_pwd_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
     vic_key_t mk;
     vic_luks_keyslot_t* ks;
@@ -1415,8 +1398,6 @@ vic_result_t luks1_change_key(
     if (_write_key_material(device, hdr, ks, cipher) != 0)
         RAISE(VIC_KEY_MATERIAL_WRITE_FAILED);
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1433,7 +1414,7 @@ done:
 
 vic_result_t luks1_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
     size_t nblocks;
     size_t nbytes;
@@ -1453,8 +1434,6 @@ vic_result_t luks1_stat(vic_blockdev_t* device, vic_luks_stat_t* buf)
     buf->payload_offset = offset;
     buf->payload_size = nbytes - offset;
 
-    result = VIC_OK;
-
 done:
 
     if (hdr)
@@ -1470,7 +1449,7 @@ vic_result_t luks1_open(
     const vic_key_t* master_key,
     size_t master_key_bytes)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     luks1_hdr_t* hdr = NULL;
     uint64_t size;
     uint64_t offset;
@@ -1550,8 +1529,6 @@ vic_result_t luks1_open(
         master_key_bytes,
         iv_offset,
         offset));
-
-    result = VIC_OK;
 
 done:
 

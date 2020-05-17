@@ -68,7 +68,7 @@ vic_result_t vic_verity_format(
     uint8_t* root_hash,
     size_t* root_hash_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     const size_t blk_sz = VERITY_BLOCK_SIZE;
     size_t nblks;
     size_t digests_per_blk;
@@ -371,8 +371,6 @@ vic_result_t vic_verity_format(
 #endif
     }
 
-    result = VIC_OK;
-
 done:
     return result;
 }
@@ -381,7 +379,7 @@ vic_result_t vic_verity_read_superblock(
     vic_blockdev_t* dev,
     vic_verity_sb_t* sb)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     char block[VERITY_BLOCK_SIZE];
 
     if (!dev || !sb)
@@ -397,8 +395,6 @@ vic_result_t vic_verity_read_superblock(
     if (memcmp(sb->signature, "verity\0\0", 8) != 0)
         RAISE(VIC_BAD_SIGNATURE);
 
-    result = VIC_OK;
-
 done:
 
     return result;
@@ -411,7 +407,7 @@ vic_result_t vic_verity_open(
     const void* root_hash,
     size_t root_hash_size)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     size_t data_dev_size;
     vic_verity_sb_t sb;
     size_t num_blocks;
@@ -459,8 +455,6 @@ vic_result_t vic_verity_open(
         sb.salt,
         sb.salt_size));
 
-    result = VIC_OK;
-
 done:
 
     return result;
@@ -468,7 +462,7 @@ done:
 
 vic_result_t vic_verity_dump(vic_blockdev_t* hash_dev)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     vic_verity_sb_t sb;
     uint8_t hash_block[VERITY_BLOCK_SIZE];
 
@@ -514,8 +508,6 @@ vic_result_t vic_verity_dump(vic_blockdev_t* hash_dev)
         vic_hexdump_flat(h.u.buf, hsize);
         printf("\n");
     }
-
-    result = VIC_OK;
 
 done:
 
