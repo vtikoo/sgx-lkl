@@ -33,7 +33,6 @@
 #include "hash.h"
 #include "crypto.h"
 #include "trace.h"
-#include "cpus.h"
 #include "dm.h"
 #include "integrity.h"
 #include "device.h"
