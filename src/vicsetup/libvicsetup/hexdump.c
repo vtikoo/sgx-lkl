@@ -92,7 +92,7 @@ void vic_hexdump_flat(const void* data, size_t size)
 vic_result_t vic_bin_to_ascii(const void* data_, size_t size, char** ascii_out)
 {
     const uint8_t* data = (const uint8_t*)data_;
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     char* ascii;
 
     if (!data || !size)
@@ -105,7 +105,6 @@ vic_result_t vic_bin_to_ascii(const void* data_, size_t size, char** ascii_out)
         snprintf(&ascii[2 * i], 3, "%02x", data[i]);
 
     *ascii_out = ascii;
-    result = VIC_OK;
 
 done:
 
@@ -117,7 +116,7 @@ vic_result_t vic_ascii_to_bin(
     uint8_t** data_out,
     size_t* size_out)
 {
-    vic_result_t result = VIC_UNEXPECTED;
+    vic_result_t result = VIC_OK;
     size_t len;
     uint8_t* data = NULL;
     size_t size;
@@ -144,16 +143,19 @@ vic_result_t vic_ascii_to_bin(
         uint32_t x;
 
         if (sscanf(&ascii[2 * i], "%02x", &x) != 1)
-            return -1;
+            RAISE(VIC_UNEXPECTED);
 
         data[i] = (uint8_t)x;
     }
 
     *data_out = data;
+    data = NULL;
     *size_out = size;
-    result = VIC_OK;
 
 done:
+
+    if (data)
+        free(data);
 
     return result;
 }
