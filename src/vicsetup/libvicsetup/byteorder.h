@@ -5,18 +5,9 @@
 #include <stdbool.h>
 
 #if defined(__i386) || defined(__x86_64)
-static __inline__ bool vic_is_big_endian(void)
-{
-    union u
-    {
-        unsigned short x;
-        unsigned char bytes[2];
-    };
-    static union u u = { 0xABCD };
-    return u.bytes[0] == 0xAB;
-}
-#else
 # define vic_is_big_endian() false
+#else
+# error "unsupported"
 #endif
 
 static __inline__ uint64_t vic_swap_u64(uint64_t x)
