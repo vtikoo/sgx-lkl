@@ -57,12 +57,18 @@ int get_opt(
     const char* opt,
     const char** optarg)
 {
+    size_t olen = strlen(opt);
+
     if (optarg)
         *optarg = NULL;
 
+    if (!opt)
+        err("unexpected");
+
+
     for (int i = 0; i < *argc; )
     {
-        if (opt && strcmp(argv[i], opt) == 0)
+        if (strcmp(argv[i], opt) == 0)
         {
             if (optarg)
             {
@@ -80,6 +86,16 @@ int get_opt(
                 (*argc)--;
                 return 0;
             }
+        }
+        else if (strncmp(argv[i], opt, olen) == 0 && argv[i][olen] == '=')
+        {
+            if (!optarg)
+                err("%s: extraneous '='", opt);
+
+            *optarg = &argv[i][olen + 1];
+            memmove(&argv[i], &argv[i+1], (*argc - i) * sizeof(char*));
+            (*argc)--;
+            return 0;
         }
         else
         {

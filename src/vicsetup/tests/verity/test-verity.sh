@@ -36,8 +36,8 @@ if [ -z "${BLKSZ}" ]; then
     BLKSZ=4096
 fi
 
-BLKSZ_OPTS+="--data-block-size ${BLKSZ} "
-BLKSZ_OPTS+="--hash-block-size ${BLKSZ} "
+BLKSZ_OPTS+="--data-block-size=${BLKSZ} "
+BLKSZ_OPTS+="--hash-block-size=${BLKSZ} "
 
 TMP=$(/bin/mktemp)
 
