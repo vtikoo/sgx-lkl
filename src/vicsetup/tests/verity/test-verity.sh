@@ -28,13 +28,20 @@ dd if=/dev/urandom of=verity bs=4096 count=${num_blocks} 2> /dev/null
 
 ##==============================================================================
 ##
-## Run veritysetup:
+## Run "veritysetup format" action
 ##
 ##==============================================================================
 
+if [ -z "${BLKSZ}" ]; then
+    BLKSZ=4096
+fi
+
+BLKSZ_OPTS+="--data-block-size ${BLKSZ} "
+BLKSZ_OPTS+="--hash-block-size ${BLKSZ} "
+
 TMP=$(/bin/mktemp)
 
-veritysetup format verity verity.hash > ${TMP}
+veritysetup format ${BLKSZ_OPTS} verity verity.hash > ${TMP}
 if [ "$?" != "0" ]; then
     echo "$0: *** veritysetup failed"
     exit 1
@@ -49,11 +56,11 @@ uuid=$(grep "UUID:" ${TMP} | sed 's/UUID:[\t ]*//g')
 
 ##==============================================================================
 ##
-## Run vicsetup command:
+## Run "vicsetup verityFormat" action
 ##
 ##==============================================================================
 
-vicsetup verityFormat --salt "${salt}" --uuid "${uuid}" verity hashtree > /dev/null
+vicsetup verityFormat --salt "${salt}" --uuid "${uuid}" ${BLKSZ_OPTS} verity hashtree > /dev/null
 if [ "$?" != "0" ]; then
     echo "$0: *** vicsetup hashtree failed"
     exit 1

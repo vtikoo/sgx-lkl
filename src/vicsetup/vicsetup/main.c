@@ -951,6 +951,8 @@ static int verityFormat(int argc, const char* argv[])
     size_t root_hash_size = sizeof(root_hash);
     vic_blockdev_t* data_dev;
     vic_blockdev_t* hash_dev;
+    uint64_t data_block_size = 0;
+    uint64_t hash_block_size = 0;
 
     /* Get --salt option */
     get_opt(&argc, argv, "--salt", &salt_opt);
@@ -964,6 +966,12 @@ static int verityFormat(int argc, const char* argv[])
     /* Get --no-superblock option */
     if (get_opt(&argc, argv, "--no-superblock", NULL) == 0)
         need_superblock = false;
+
+    /* Get --data-block-size option */
+    get_opt_u64(&argc, argv, "--data-block-size", &data_block_size);
+
+    /* Get --hash-block-size option */
+    get_opt_u64(&argc, argv, "--hash-block-size", &hash_block_size);
 
     /* Check usage */
     if (argc != 4)
@@ -1014,6 +1022,8 @@ static int verityFormat(int argc, const char* argv[])
         salt,
         salt_size,
         need_superblock,
+        data_block_size,
+        hash_block_size,
         root_hash,
         &root_hash_size)) != 0)
     {
@@ -1033,7 +1043,6 @@ static int verityFormat(int argc, const char* argv[])
 static int verityOpen(int argc, const char* argv[])
 {
     vic_result_t r;
-    const size_t blksz = 4096;
 
     /* Check usage */
     if (argc != 6)
@@ -1060,10 +1069,10 @@ static int verityOpen(int argc, const char* argv[])
     if (vic_ascii_to_bin(root_hash_opt, &root_hash, &root_hash_size) != VIC_OK)
         err("bad root-hash argument");
 
-    if (vic_blockdev_open(datafile, data_flags, blksz, &data_dev) != VIC_OK)
+    if (vic_blockdev_open(datafile, data_flags, 0, &data_dev) != VIC_OK)
         err("cannot open data file: %s\n", datafile);
 
-    if (vic_blockdev_open(hashfile, hash_flags, blksz, &hash_dev) != VIC_OK)
+    if (vic_blockdev_open(hashfile, hash_flags, 0, &hash_dev) != VIC_OK)
         err("cannot open hash file: %s\n", hashfile);
 
     if ((r = vic_verity_open(

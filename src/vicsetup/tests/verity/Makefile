@@ -7,19 +7,24 @@ all:
 tests: dirs test1 test2 test3
 
 test1:
-	./test-verity.sh
-	./test-verity.sh 2
-	./test-verity.sh 4
-	./test-verity.sh 7
-	./test-verity.sh 13
-	./test-verity.sh 112
-	./test-verity.sh 4096
-	./test-verity.sh 10000
-	./test-verity.sh 20000
-	./test-verity.sh 30000
+	$(MAKE) __test1 TEST1_BLOCKSIZE=512
+	$(MAKE) __test1 TEST1_BLOCKSIZE=1024
+	$(MAKE) __test1 TEST1_BLOCKSIZE=2048
+	$(MAKE) __test1 TEST1_BLOCKSIZE=4096
+
+__test1:
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 2 )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 4 )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 7 )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 13 )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 112 )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 4096 )
+	( BLKSZ=${TEST1_BLOCKSIZE} ./test-verity.sh 10000 )
 
 test2: dirs
 	dd if=/dev/urandom of=verity bs=4096 count=1000
+	rm -f verity.hash
 	veritysetup format verity verity.hash
 	$(MAKE) __test2
 

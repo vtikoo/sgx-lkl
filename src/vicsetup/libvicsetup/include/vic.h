@@ -343,6 +343,8 @@ vic_result_t vic_verity_format(
     const uint8_t* salt,
     size_t salt_size,
     bool need_superblock,
+    uint64_t data_block_size,
+    uint64_t hash_block_size,
     uint8_t* root_hash,
     size_t* root_hash_size);
 

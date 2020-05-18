@@ -1,19 +1,25 @@
 
     AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
-    (A) Support other AES cipher modes
+    (A) Add tracing facility
 
     BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 
-    (B) Support verity block sizes other than 4096
-
     (B) Get rid of vic_key_t type
 
-    (B) Add logging facility
+    (B) LUKS2: support ciphers other than "aes-xts-plain64"
+
+    (B) Support other AES cipher modes
+
+    CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+    (C) Verity: allow data-block-size and hash-block-size to be different.
 
     XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
     (X) Finish libcryptsetup.h
 
     (X) Support hash device being embedded in data device
+
+    (X) Support verity block sizes other than 4096
 
