@@ -35,6 +35,7 @@
 #include "dm.h"
 #include "integrity.h"
 #include "round.h"
+#include "goto.h"
 
 /*
 **==============================================================================
@@ -89,17 +90,7 @@ static uint8_t _magic_2nd[LUKS_MAGIC_SIZE] = LUKS_MAGIC_2ND;
 #define VIC_RIPE160_SIZE 20
 #define VIC_MAX_HASH_SIZE 64
 
-
 #define LUKS_IV_SIZE 16
-
-#define GOTO(LABEL)                                                       \
-    do                                                                    \
-    {                                                                     \
-        printf("GOTO: %s(%u): %s()\n", __FILE__, __LINE__, __FUNCTION__); \
-        fflush(stdout);                                                   \
-        goto LABEL;                                                       \
-    }                                                                     \
-    while (0)
 
 uint32_t vic_luks_checksum(const void* data, size_t size)
 {

@@ -9,6 +9,7 @@
 #include "../libvicsetup/crypto.h"
 #include "../libvicsetup/lukscommon.h"
 #include "../libvicsetup/include/libcryptsetup.h"
+#include "../libvicsetup/trace.h"
 
 #define USAGE \
     "\n" \
@@ -27,6 +28,7 @@
     "    verityFormat\n" \
     "    verityOpen\n" \
     "    cryptsetupLuksFormat\n" \
+    "    veritysetupOpen\n" \
     "\n"
 
 static const char* arg0;
@@ -983,6 +985,8 @@ static int verityFormat(int argc, const char* argv[])
             "    --uuid <value>\n"
             "    --hash <type>\n"
             "    --no-superblock\n"
+            "    --data-block-size\n"
+            "    --hash-block-size\n"
             "\n"
             "\n",
             argv[0],
@@ -1094,6 +1098,30 @@ static int verityOpen(int argc, const char* argv[])
 int main(int argc, const char* argv[])
 {
     arg0 = argv[0];
+
+    /* Handle --trace option */
+    {
+        const char* trace = NULL;
+
+        get_opt(&argc, argv, "--trace", &trace);
+
+        if (trace)
+        {
+            if (strcmp(trace, "none") == 0)
+                vic_trace_set_level(VIC_TRACE_NONE);
+            else if (strcmp(trace, "fatal") == 0)
+                vic_trace_set_level(VIC_TRACE_FATAL);
+            else if (strcmp(trace, "error") == 0)
+                vic_trace_set_level(VIC_TRACE_ERROR);
+            else if (strcmp(trace, "warning") == 0)
+                vic_trace_set_level(VIC_TRACE_WARNING);
+            else if (strcmp(trace, "debug") == 0)
+                vic_trace_set_level(VIC_TRACE_DEBUG);
+            else
+                err("bad --trace option: %s", trace);
+        }
+    }
+
 
     if (argc < 2)
     {

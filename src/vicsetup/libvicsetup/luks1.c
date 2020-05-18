@@ -27,6 +27,7 @@
 #include "uuid.h"
 #include "dm.h"
 #include "round.h"
+#include "goto.h"
 
 /*
 **==============================================================================
@@ -48,15 +49,6 @@
 #define LUKS_DISK_ALIGNMENT (1024 * 1024)
 
 #define LUKS_IV_SIZE 16
-
-#define GOTO(LABEL)                                                       \
-    do                                                                    \
-    {                                                                     \
-        printf("GOTO: %s(%u): %s()\n", __FILE__, __LINE__, __FUNCTION__); \
-        fflush(stdout);                                                   \
-        goto LABEL;                                                       \
-    }                                                                     \
-    while (0)
 
 #define DEFAULT_HASH "sha256"
 

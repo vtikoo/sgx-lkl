@@ -14,15 +14,7 @@
 #include "crypto.h"
 #include "hash.h"
 #include "byteorder.h"
-
-#define GOTO(LABEL)                                                       \
-    do                                                                    \
-    {                                                                     \
-        printf("GOTO: %s(%u): %s()\n", __FILE__, __LINE__, __FUNCTION__); \
-        fflush(stdout);                                                   \
-        goto LABEL;                                                       \
-    }                                                                     \
-    while (0)
+#include "goto.h"
 
 /* Disable this to use Valgrind where RDRAND is an illegal instruction */
 //#define USE_RDRAND

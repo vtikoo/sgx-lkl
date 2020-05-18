@@ -4,10 +4,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-
-#include "vic.h"
-
-#define TRACE_RAISE
+#include <vic.h>
+#include "trace.h"
 
 #define ERAISE(ERRNUM)                                   \
     do                                                   \
@@ -38,13 +36,14 @@ static __inline__ void __eraise(
     const char* func,
     int errnum)
 {
-#ifdef TRACE_RAISE
-    if (errnum < 0)
-        errnum = -errnum;
-    const char* str = strerror(errnum);
-    printf("ERAISE: %s(%u): %s(): %s(%u)\n", file, line, func, str, errnum);
-    fflush(stdout);
-#endif
+    __vic_trace(
+        VIC_TRACE_ERROR,
+        file,
+        line,
+        func,
+        "ERAISE: errno=%d: %s",
+        errnum < 0 ? -errnum : errnum,
+        strerror(errnum));
 }
 
 #endif /* _VIC_ERAISE_H */
