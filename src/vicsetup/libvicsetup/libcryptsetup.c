@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "crypto.h"
 #include "verity.h"
+#include "trace.h"
 
 #define MAGIC 0xa8ea23c6
 
@@ -629,7 +630,6 @@ int crypt_activate_by_passphrase(
     }
     else if (_is_verity(cd->type))
     {
-        /* TODO: */
         ERAISE(ENOTSUP);
     }
     else
@@ -775,6 +775,16 @@ done:
 
 void crypt_set_debug_level(int level)
 {
-    (void)level;
-    /* TODO: implement */
+    switch (level)
+    {
+        case CRYPT_DEBUG_ALL:
+            vic_trace_set_level(VIC_TRACE_DEBUG);
+            break;
+        case CRYPT_DEBUG_JSON:
+            vic_trace_set_level(VIC_TRACE_DEBUG);
+            break;
+        default:
+            vic_trace_set_level(VIC_TRACE_NONE);
+            break;
+    }
 }
