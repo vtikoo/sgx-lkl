@@ -2050,6 +2050,9 @@ done:
     if (data)
         free(data);
 
+    if (json_data)
+        free(json_data);
+
     return ret;
 }
 
@@ -2305,7 +2308,6 @@ static vic_result_t _find_key_by_pwd(
         if (*ks->type == '\0')
             continue;
 
-        /* ATTN: which key size should be used here? */
         if (strcmp(ks->type, "luks2") != 0)
             RAISE(VIC_UNKNOWN_KEYSLOT_TYPE);
 
@@ -2665,8 +2667,8 @@ static vic_result_t _initialize_hdr(
         /* Calcualte the keyslots size */
         keyslots_size = OVERHEAD_BYTES - hdr_sizes;
 
-/* ATTN: test this */
 #if 0
+        /* ATTN: figure out why this fails */
         /* Verify that keyslots_size is big enough */
         if (keyslots_size < LUKS2_NUM_KEYSLOTS * area_size)
             RAISE(VIC_UNEXPECTED);
