@@ -7,7 +7,7 @@ INCLUDES += -I$(TOP)/libvicsetup/include
 SOURCES += main.c
 
 LDFLAGS += -L$(TOP)/libvicsetup -lvicsetup
-LDFLAGS += -L$(LIBJSON_DIR) -ljson
+LDFLAGS += -L$(LIBJSON_DIR) -ljsonprint -ljson
 LDFLAGS += -ldevmapper
 LDFLAGS += -lmbedcrypto
 LDFLAGS += -lpthread

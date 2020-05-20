@@ -36,25 +36,14 @@
 **==============================================================================
 */
 
-typedef _Bool bool;
-
-#define false ((bool)0)
-#define true ((bool)1)
-
 #ifndef NULL
 #define NULL ((void*)0)
 #endif
 
-#define UINT64_MAX (0xffffffffffffffffu)
-#define LONG_MAX 0x7fffffffffffffffL
-#define ULONG_MAX (2UL * LONG_MAX + 1)
-
-typedef unsigned int uint32_t;
-
-typedef unsigned long uint64_t;
-typedef long ptrdiff_t;
 typedef unsigned long size_t;
 typedef unsigned int uint32_t;
+typedef unsigned long uint64_t;
+typedef long ptrdiff_t;
 
 static int _tolower(int c)
 {
@@ -154,19 +143,57 @@ static int _strcmp(const char* s1, const char* s2)
     return *s1 - *s2;
 }
 
-#if 0
-static char* _strcpy(char* dest, const char* src)
+static size_t _strlcpy(char* dest, const char* src, size_t size)
 {
-    char* ret = dest;
+    const char* start = src;
+
+    if (size)
+    {
+        char* end = dest + size - 1;
+
+        while (*src && dest != end)
+            *dest++ = (char)*src++;
+
+        *dest = '\0';
+    }
 
     while (*src)
-        *dest++ = *src++;
+        src++;
 
-    *dest = '\0';
-
-    return ret;
+    return (size_t)(src - start);
 }
-#endif
+
+static size_t _strlcat(char* dest, const char* src, size_t size)
+{
+    size_t n = 0;
+
+    if (size)
+    {
+        char* end = dest + size - 1;
+
+        while (*dest && dest != end)
+        {
+            dest++;
+            n++;
+        }
+
+        while (*src && dest != end)
+        {
+            n++;
+            *dest++ = *src++;
+        }
+
+        *dest = '\0';
+    }
+
+    while (*src)
+    {
+        src++;
+        n++;
+    }
+
+    return n;
+}
 
 //
 // If c is a digit character:
@@ -207,7 +234,7 @@ static const unsigned char _digit[256] = {
 };
 
 /* Return true if c is a digit character with the given base */
-static bool _isdigit2(char c, int base)
+static int _isdigit2(char c, int base)
 {
     return _digit[(unsigned char)c] < base;
 }
@@ -216,7 +243,10 @@ static long int _strtol(const char* nptr, char** endptr, int base)
 {
     const char* p;
     unsigned long x = 0;
-    bool negative = false;
+    int negative = 0;
+    const unsigned long UINT64_MAX = 0xffffffffffffffffu;
+    const unsigned long LONG_MAX = 0x7fffffffffffffffL;
+    const unsigned long ULONG_MAX = (2UL * LONG_MAX + 1);
 
     if (endptr)
         *endptr = (char*)nptr;
@@ -238,7 +268,7 @@ static long int _strtol(const char* nptr, char** endptr, int base)
     }
     else if (p[0] == '-')
     {
-        negative = true;
+        negative = 1;
         p++;
     }
 
@@ -341,13 +371,13 @@ static unsigned long int _strtoul(const char* nptr, char** endptr, int base)
 static double _strtod(const char* nptr, char** endptr)
 {
     const char* p;
-    bool negative = false;
-    bool exp_negative = false;
+    int negative = 0;
+    int exp_negative = 0;
     unsigned long x;
     unsigned long y = 0;
     unsigned long r = 1;
     unsigned long exp = 0;
-    bool have_x = false;
+    int have_x = 0;
     double z;
 
     if (endptr)
@@ -370,7 +400,7 @@ static double _strtod(const char* nptr, char** endptr)
     }
     else if (p[0] == '-')
     {
-        negative = true;
+        negative = 1;
         p++;
     }
 
@@ -381,7 +411,7 @@ static double _strtod(const char* nptr, char** endptr)
 
         if (p != end)
         {
-            have_x = true;
+            have_x = 1;
             *endptr = (char*)end;
         }
 
@@ -427,7 +457,7 @@ static double _strtod(const char* nptr, char** endptr)
         p++;
 
         if (*p == '-')
-            exp_negative = true;
+            exp_negative = 1;
 
         if (*p == '-' || *p == '+')
             p++;
@@ -465,63 +495,6 @@ static double _strtod(const char* nptr, char** endptr)
 */
 
 #define JSON_STRLIT(STR) STR, sizeof(STR)-1
-
-typedef struct _intstr_buf
-{
-    char data[32];
-} intstr_buf_t;
-
-static size_t _strlcpy(char* dest, const char* src, size_t size)
-{
-    const char* start = src;
-
-    if (size)
-    {
-        char* end = dest + size - 1;
-
-        while (*src && dest != end)
-            *dest++ = (char)*src++;
-
-        *dest = '\0';
-    }
-
-    while (*src)
-        src++;
-
-    return (size_t)(src - start);
-}
-
-static size_t _strlcat(char* dest, const char* src, size_t size)
-{
-    size_t n = 0;
-
-    if (size)
-    {
-        char* end = dest + size - 1;
-
-        while (*dest && dest != end)
-        {
-            dest++;
-            n++;
-        }
-
-        while (*src && dest != end)
-        {
-            n++;
-            *dest++ = *src++;
-        }
-
-        *dest = '\0';
-    }
-
-    while (*src)
-    {
-        src++;
-        n++;
-    }
-
-    return n;
-}
 
 void __json_trace(
     json_parser_t* parser,
@@ -576,7 +549,7 @@ static size_t _split(
     return n;
 }
 
-static unsigned char _CharToHexNibble(char c)
+static unsigned char _char_to_nibble(char c)
 {
     c = _tolower(c);
 
@@ -588,23 +561,23 @@ static unsigned char _CharToHexNibble(char c)
     return 0xFF;
 }
 
-static int _IsNumberChar(char c)
+static int _is_number_char(char c)
 {
     return
         _isdigit(c) || c == '-' || c == '+' || c == 'e' || c == 'E' || c == '.';
 }
 
-static int _IsDecimalOrExponent(char c)
+static int _is_decimal_or_exponent(char c)
 {
     return c == '.' || c == 'e' || c == 'E';
 }
 
-static int _HexStr4ToUint(const char* s, unsigned int* x)
+static int _hex_str4_to_uint(const char* s, unsigned int* x)
 {
-    unsigned int n0 = _CharToHexNibble(s[0]);
-    unsigned int n1 = _CharToHexNibble(s[1]);
-    unsigned int n2 = _CharToHexNibble(s[2]);
-    unsigned int n3 = _CharToHexNibble(s[3]);
+    unsigned int n0 = _char_to_nibble(s[0]);
+    unsigned int n1 = _char_to_nibble(s[1]);
+    unsigned int n2 = _char_to_nibble(s[2]);
+    unsigned int n3 = _char_to_nibble(s[3]);
 
     if ((n0 | n1 | n2 | n3) & 0xF0)
         return -1;
@@ -622,7 +595,7 @@ static json_result_t _invoke_callback(
     return parser->callback(parser, reason, type, un, parser->callback_data);
 }
 
-static json_result_t _GetString(json_parser_t* parser, char** str)
+static json_result_t _get_string(json_parser_t* parser, char** str)
 {
     json_result_t result = JSON_OK;
     char* start = parser->ptr;
@@ -734,7 +707,7 @@ static json_result_t _GetString(json_parser_t* parser, char** str)
                         if (end - p < 4)
                             RAISE(JSON_EOF);
 
-                        if (_HexStr4ToUint(p, &x) != 0)
+                        if (_hex_str4_to_uint(p, &x) != 0)
                             RAISE(JSON_BAD_SYNTAX);
 
                         if (x >= 256)
@@ -774,7 +747,7 @@ done:
     return result;
 }
 
-static int _Expect(json_parser_t* parser, const char* str, size_t len)
+static int _expect(json_parser_t* parser, const char* str, size_t len)
 {
     if (parser->end - parser->ptr >= (ptrdiff_t)len &&
         _memcmp(parser->ptr, str, len) == 0)
@@ -786,9 +759,9 @@ static int _Expect(json_parser_t* parser, const char* str, size_t len)
     return -1;
 }
 
-static json_result_t _GetValue(json_parser_t* parser);
+static json_result_t _get_value(json_parser_t* parser);
 
-static json_result_t _GetArray(json_parser_t* parser)
+static json_result_t _get_array(json_parser_t* parser)
 {
     json_result_t result = JSON_OK;
     char c;
@@ -818,7 +791,7 @@ static json_result_t _GetArray(json_parser_t* parser)
         else
         {
             parser->ptr--;
-            CHECK(_GetValue(parser));
+            CHECK(_get_value(parser));
         }
     }
 
@@ -826,7 +799,7 @@ done:
     return result;
 }
 
-static json_result_t _GetObject(json_parser_t* parser)
+static json_result_t _get_object(json_parser_t* parser)
 {
     json_result_t result = JSON_OK;
     char c;
@@ -856,7 +829,7 @@ static json_result_t _GetObject(json_parser_t* parser)
             json_union_t un;
 
             /* Get name */
-            CHECK(_GetString(parser, (char**)&un.string));
+            CHECK(_get_string(parser, (char**)&un.string));
 
             parser->path[parser->depth - 1] = un.string;
 
@@ -881,7 +854,7 @@ static json_result_t _GetObject(json_parser_t* parser)
             }
 
             /* Expect: value */
-            CHECK(_GetValue(parser));
+            CHECK(_get_value(parser));
         }
         else if (c == '}')
         {
@@ -900,7 +873,7 @@ done:
     return result;
 }
 
-static json_result_t _GetNumber(
+static json_result_t _get_number(
     json_parser_t* parser,
     json_type_t* type,
     json_union_t* un)
@@ -912,12 +885,12 @@ static json_result_t _GetNumber(
     const char* start = parser->ptr;
 
     /* Skip over any characters that can comprise a number */
-    while (parser->ptr != parser->end && _IsNumberChar(*parser->ptr))
+    while (parser->ptr != parser->end && _is_number_char(*parser->ptr))
     {
         c = *parser->ptr;
         parser->ptr++;
 
-        if (_IsDecimalOrExponent(c))
+        if (_is_decimal_or_exponent(c))
             isInteger = 0;
     }
 
@@ -940,7 +913,7 @@ done:
 }
 
 /* value = false / null / true / object / array / number / string */
-static json_result_t _GetValue(json_parser_t* parser)
+static json_result_t _get_value(json_parser_t* parser)
 {
     json_result_t result = JSON_OK;
     char c;
@@ -962,7 +935,7 @@ static json_result_t _GetValue(json_parser_t* parser)
         {
             json_union_t un;
 
-            if (_Expect(parser, JSON_STRLIT("alse")) != 0)
+            if (_expect(parser, JSON_STRLIT("alse")) != 0)
                 RAISE(JSON_BAD_SYNTAX);
 
             un.boolean = 0;
@@ -977,7 +950,7 @@ static json_result_t _GetValue(json_parser_t* parser)
         }
         case 'n':
         {
-            if (_Expect(parser, JSON_STRLIT("ull")) != 0)
+            if (_expect(parser, JSON_STRLIT("ull")) != 0)
                 RAISE(JSON_BAD_SYNTAX);
 
             CHECK(_invoke_callback(
@@ -992,7 +965,7 @@ static json_result_t _GetValue(json_parser_t* parser)
         {
             json_union_t un;
 
-            if (_Expect(parser, JSON_STRLIT("rue")) != 0)
+            if (_expect(parser, JSON_STRLIT("rue")) != 0)
                 RAISE(JSON_BAD_SYNTAX);
 
             un.boolean = 1;
@@ -1007,7 +980,7 @@ static json_result_t _GetValue(json_parser_t* parser)
         }
         case '{':
         {
-            CHECK(_GetObject(parser));
+            CHECK(_get_object(parser));
             break;
         }
         case '[':
@@ -1018,7 +991,7 @@ static json_result_t _GetValue(json_parser_t* parser)
                 JSON_TYPE_NULL,
                 NULL));
 
-            if (_GetArray(parser) != JSON_OK)
+            if (_get_array(parser) != JSON_OK)
                 RAISE(JSON_BAD_SYNTAX);
 
             CHECK(_invoke_callback(
@@ -1033,7 +1006,7 @@ static json_result_t _GetValue(json_parser_t* parser)
         {
             json_union_t un;
 
-            if (_GetString(parser, (char**)&un.string) != JSON_OK)
+            if (_get_string(parser, (char**)&un.string) != JSON_OK)
                 RAISE(JSON_BAD_SYNTAX);
 
             CHECK(_invoke_callback(
@@ -1050,7 +1023,7 @@ static json_result_t _GetValue(json_parser_t* parser)
 
             parser->ptr--;
 
-            if (_GetNumber(parser, &type, &un) != JSON_OK)
+            if (_get_number(parser, &type, &un) != JSON_OK)
                 RAISE(JSON_BAD_SYNTAX);
 
             CHECK(_invoke_callback(parser, JSON_REASON_VALUE, type, &un));
@@ -1113,7 +1086,7 @@ json_result_t json_parser_parse(json_parser_t* parser)
             return JSON_BAD_SYNTAX;
     }
 
-    CHECK(_GetObject(parser));
+    CHECK(_get_object(parser));
 
 done:
     return result;
