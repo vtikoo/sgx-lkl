@@ -112,6 +112,12 @@ struct _json_parser
     const char* path[JSON_MAX_NESTING];
     size_t depth;
     json_allocator_t* allocator;
+    void (*trace)(
+        json_parser_t* parser,
+        const char* file,
+        unsigned int line,
+        const char* func,
+        const char* message);
 };
 
 json_result_t json_parser_init(

@@ -50,6 +50,7 @@ typedef _Bool bool;
 #define ULONG_MAX (2UL * LONG_MAX + 1)
 
 typedef unsigned int uint32_t;
+
 typedef unsigned long uint64_t;
 typedef long ptrdiff_t;
 typedef unsigned long size_t;
@@ -153,6 +154,7 @@ static int _strcmp(const char* s1, const char* s2)
     return *s1 - *s2;
 }
 
+#if 0
 static char* _strcpy(char* dest, const char* src)
 {
     char* ret = dest;
@@ -164,6 +166,7 @@ static char* _strcpy(char* dest, const char* src)
 
     return ret;
 }
+#endif
 
 static char* _strchr(const char* s, int c)
 {
@@ -495,19 +498,114 @@ static double _strtod(const char* nptr, char** endptr)
 /*
 **==============================================================================
 **
-** JSON paraser implementation:
+** JSON parser implementation:
 **
 **==============================================================================
 */
 
 #define JSON_STRLIT(STR) STR, sizeof(STR)-1
 
-#define RETURN(VALUE)                                                       \
-    do                                                                      \
-    {                                                                       \
-        return VALUE;                                                       \
-    }                                                                       \
-    while (0)
+typedef struct _intstr_buf
+{
+    char data[32];
+} intstr_buf_t;
+
+static const char* _u64tostr(intstr_buf_t* buf, uint64_t x, size_t* size)
+{
+    char* p;
+    char* end = buf->data + sizeof(buf->data) - 1;
+
+    p = end;
+    *p = '\0';
+
+    do
+    {
+        *--p = (char)('0' + x % 10);
+    } while (x /= 10);
+
+    if (size)
+        *size = (size_t)(end - p);
+
+    return p;
+}
+
+static size_t _strlcpy(char* dest, const char* src, size_t size)
+{
+    const char* start = src;
+
+    if (size)
+    {
+        char* end = dest + size - 1;
+
+        while (*src && dest != end)
+            *dest++ = (char)*src++;
+
+        *dest = '\0';
+    }
+
+    while (*src)
+        src++;
+
+    return (size_t)(src - start);
+}
+
+static size_t _strlcat(char* dest, const char* src, size_t size)
+{
+    size_t n = 0;
+
+    if (size)
+    {
+        char* end = dest + size - 1;
+
+        while (*dest && dest != end)
+        {
+            dest++;
+            n++;
+        }
+
+        while (*src && dest != end)
+        {
+            n++;
+            *dest++ = *src++;
+        }
+
+        *dest = '\0';
+    }
+
+    while (*src)
+    {
+        src++;
+        n++;
+    }
+
+    return n;
+}
+
+void __json_trace(
+    json_parser_t* parser,
+    const char* file,
+    unsigned int line,
+    const char* func,
+    const char* message)
+{
+    if (parser && parser->trace)
+        (*parser->trace)(parser, file, line, func, message);
+}
+
+void __json_trace_result(
+    json_parser_t* parser,
+    const char* file,
+    unsigned int line,
+    const char* func,
+    json_result_t result)
+{
+    intstr_buf_t buf;
+    char message[64];
+
+    _strlcpy(message, "result=", sizeof(message));
+    _strlcat(message, _u64tostr(&buf, result, NULL), sizeof(message));
+    __json_trace(parser, file, line, func, message);
+}
 
 static size_t _split(
     char* str,
@@ -587,19 +685,20 @@ static int _HexStr4ToUint(const char* s, unsigned int* x)
 }
 
 static json_result_t _invoke_callback(
-    json_parser_t* self,
+    json_parser_t* parser,
     json_reason_t reason,
     json_type_t type,
     const json_union_t* un)
 {
-    return self->callback(self, reason, type, un, self->callback_data);
+    return parser->callback(parser, reason, type, un, parser->callback_data);
 }
 
-static json_result_t _GetString(json_parser_t* self, char** str)
+static json_result_t _GetString(json_parser_t* parser, char** str)
 {
-    char* start = self->ptr;
+    json_result_t result = JSON_OK;
+    char* start = parser->ptr;
     char* p = start;
-    const char* end = self->end;
+    const char* end = parser->end;
     int escaped = 0;
 
     /* Save the start of the string */
@@ -615,23 +714,23 @@ static json_result_t _GetString(json_parser_t* self, char** str)
             if (*p == 'u')
             {
                 if (end - p < 4)
-                    RETURN(JSON_EOF);
+                    RAISE(JSON_EOF);
                 p += 4;
             }
             else
             {
                 if (p == end)
-                    RETURN(JSON_EOF);
+                    RAISE(JSON_EOF);
                 p++;
             }
         }
     }
 
     if (p == end || *p != '"')
-        RETURN(JSON_EOF);
+        RAISE(JSON_EOF);
 
     /* Update the os */
-    self->ptr += p - start + 1;
+    parser->ptr += p - start + 1;
 
     /* Overwrite the '"' character */
     *p = '\0';
@@ -652,7 +751,7 @@ static json_result_t _GetString(json_parser_t* self, char** str)
                 p++;
 
                 if (!*p)
-                    RETURN(JSON_EOF);
+                    RAISE(JSON_EOF);
 
                 switch (*p)
                 {
@@ -704,15 +803,15 @@ static json_result_t _GetString(json_parser_t* self, char** str)
 
                         /* Expecting 4 hex digits: XXXX */
                         if (end - p < 4)
-                            RETURN(JSON_EOF);
+                            RAISE(JSON_EOF);
 
                         if (_HexStr4ToUint(p, &x) != 0)
-                            RETURN(JSON_BAD_SYNTAX);
+                            RAISE(JSON_BAD_SYNTAX);
 
                         if (x >= 256)
                         {
                             /* ATTN.B: UTF-8 not supported yet! */
-                            RETURN(JSON_UNSUPPORTED);
+                            RAISE(JSON_UNSUPPORTED);
                         }
 
                         /* Overwrite '\' character */
@@ -727,7 +826,7 @@ static json_result_t _GetString(json_parser_t* self, char** str)
                     }
                     default:
                     {
-                        RETURN(JSON_FAILED);
+                        RAISE(JSON_FAILED);
                     }
                 }
             }
@@ -742,41 +841,42 @@ static json_result_t _GetString(json_parser_t* self, char** str)
     Dump(stdout, "GETSTRING", *str, strlen(*str));
 #endif
 
-    return JSON_OK;
+done:
+    return result;
 }
 
-static int _Expect(json_parser_t* self, const char* str, size_t len)
+static int _Expect(json_parser_t* parser, const char* str, size_t len)
 {
-    if (self->end - self->ptr >= (ptrdiff_t)len &&
-        _memcmp(self->ptr, str, len) == 0)
+    if (parser->end - parser->ptr >= (ptrdiff_t)len &&
+        _memcmp(parser->ptr, str, len) == 0)
     {
-        self->ptr += len;
+        parser->ptr += len;
         return 0;
     }
 
     return -1;
 }
 
-static json_result_t _GetValue(json_parser_t* self);
+static json_result_t _GetValue(json_parser_t* parser);
 
-static json_result_t _GetArray(json_parser_t* self)
+static json_result_t _GetArray(json_parser_t* parser)
 {
-    json_result_t r;
+    json_result_t result = JSON_OK;
     char c;
 
     /* array = begin-array [ value *( value-separator value ) ] end-array */
     for (;;)
     {
         /* Skip whitespace */
-        while (self->ptr != self->end && _isspace(*self->ptr))
-            self->ptr++;
+        while (parser->ptr != parser->end && _isspace(*parser->ptr))
+            parser->ptr++;
 
         /* Fail if output exhausted */
-        if (self->ptr == self->end)
-            RETURN(JSON_EOF);
+        if (parser->ptr == parser->end)
+            RAISE(JSON_EOF);
 
         /* Read the next character */
-        c = *self->ptr++;
+        c = *parser->ptr++;
 
         if (c == ',')
         {
@@ -788,88 +888,71 @@ static json_result_t _GetArray(json_parser_t* self)
         }
         else
         {
-            self->ptr--;
-
-            if ((r = _GetValue(self)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+            parser->ptr--;
+            CHECK(_GetValue(parser));
         }
     }
 
-    return JSON_OK;
+done:
+    return result;
 }
 
-static json_result_t _GetObject(json_parser_t* self)
+static json_result_t _GetObject(json_parser_t* parser)
 {
-    json_result_t r;
+    json_result_t result = JSON_OK;
     char c;
 
-    if ((r = _invoke_callback(
-        self,
-        JSON_REASON_BEGIN_OBJECT,
-        JSON_TYPE_NULL,
-        NULL)) != JSON_OK)
-    {
-        RETURN(r);
-    }
+    CHECK(_invoke_callback(parser, JSON_REASON_BEGIN_OBJECT, JSON_TYPE_NULL,
+        NULL));
 
-    if (self->depth++ == JSON_MAX_NESTING)
-        RETURN(JSON_NESTING_OVERFLOW);
+    if (parser->depth++ == JSON_MAX_NESTING)
+        RAISE(JSON_NESTING_OVERFLOW);
 
     /* Expect: member = string name-separator value */
     for (;;)
     {
         /* Skip whitespace */
-        while (self->ptr != self->end && _isspace(*self->ptr))
-            self->ptr++;
+        while (parser->ptr != parser->end && _isspace(*parser->ptr))
+            parser->ptr++;
 
         /* Fail if output exhausted */
-        if (self->ptr == self->end)
-            RETURN(JSON_EOF);
+        if (parser->ptr == parser->end)
+            RAISE(JSON_EOF);
 
         /* Read the next character */
-        c = *self->ptr++;
+        c = *parser->ptr++;
 
         if (c == '"')
         {
             json_union_t un;
 
             /* Get name */
-            if ((r = _GetString(self, (char**)&un.string)) != JSON_OK)
-                RETURN(r);
+            CHECK(_GetString(parser, (char**)&un.string));
 
-            self->path[self->depth - 1] = un.string;
+            parser->path[parser->depth - 1] = un.string;
 
-            if ((r = _invoke_callback(
-                self,
-                JSON_REASON_NAME,
-                JSON_TYPE_STRING,
-                &un)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+            CHECK(_invoke_callback(parser, JSON_REASON_NAME, JSON_TYPE_STRING,
+                &un));
 
             /* Expect: name-separator(':') */
             {
                 /* Skip whitespace */
-                while (self->ptr != self->end && _isspace(*self->ptr))
-                    self->ptr++;
+                while (parser->ptr != parser->end && _isspace(*parser->ptr))
+                    parser->ptr++;
 
                 /* Fail if output exhausted */
-                if (self->ptr == self->end)
-                    RETURN(JSON_EOF);
+                if (parser->ptr == parser->end)
+                    RAISE(JSON_EOF);
 
                 /* Read the next character */
-                c = *self->ptr++;
+                c = *parser->ptr++;
 
                 if (c != ':')
-                    RETURN(JSON_BAD_SYNTAX);
+                    RAISE(JSON_BAD_SYNTAX);
             }
 
             /* Expect: value */
-            if ((r = _GetValue(self)) != JSON_OK)
-                RETURN(r);
+            CHECK(_GetValue(parser));
         }
         else if (c == '}')
         {
@@ -877,38 +960,33 @@ static json_result_t _GetObject(json_parser_t* self)
         }
     }
 
-    if (self->depth == 0)
-        RETURN(JSON_NESTING_UNDERFLOW);
+    if (parser->depth == 0)
+        RAISE(JSON_NESTING_UNDERFLOW);
 
-    if ((r = _invoke_callback(
-        self,
-        JSON_REASON_END_OBJECT,
-        JSON_TYPE_NULL,
-        NULL)) != JSON_OK)
-    {
-        RETURN(r);
-    }
+    CHECK(_invoke_callback(parser, JSON_REASON_END_OBJECT, JSON_TYPE_NULL, NULL));
 
-    self->depth--;
+    parser->depth--;
 
-    return JSON_OK;
+done:
+    return result;
 }
 
 static json_result_t _GetNumber(
-    json_parser_t* self,
+    json_parser_t* parser,
     json_type_t* type,
     json_union_t* un)
 {
+    json_result_t result = JSON_OK;
     char c;
     int isInteger = 1;
     char* end;
-    const char* start = self->ptr;
+    const char* start = parser->ptr;
 
     /* Skip over any characters that can comprise a number */
-    while (self->ptr != self->end && _IsNumberChar(*self->ptr))
+    while (parser->ptr != parser->end && _IsNumberChar(*parser->ptr))
     {
-        c = *self->ptr;
-        self->ptr++;
+        c = *parser->ptr;
+        parser->ptr++;
 
         if (_IsDecimalOrExponent(c))
             isInteger = 0;
@@ -925,28 +1003,29 @@ static json_result_t _GetNumber(
         un->real = _strtod(start, &end);
     }
 
-    if (!end || end != self->ptr)
-        RETURN(JSON_BAD_SYNTAX);
+    if (!end || end != parser->ptr)
+        RAISE(JSON_BAD_SYNTAX);
 
-    return JSON_OK;
+done:
+    return result;
 }
 
 /* value = false / null / true / object / array / number / string */
-static json_result_t _GetValue(json_parser_t* self)
+static json_result_t _GetValue(json_parser_t* parser)
 {
+    json_result_t result = JSON_OK;
     char c;
-    json_result_t r;
 
     /* Skip whitespace */
-    while (self->ptr != self->end && _isspace(*self->ptr))
-        self->ptr++;
+    while (parser->ptr != parser->end && _isspace(*parser->ptr))
+        parser->ptr++;
 
     /* Fail if output exhausted */
-    if (self->ptr == self->end)
-        RETURN(JSON_EOF);
+    if (parser->ptr == parser->end)
+        RAISE(JSON_EOF);
 
     /* Read the next character */
-    c = _tolower(*self->ptr++);
+    c = _tolower(*parser->ptr++);
 
     switch (c)
     {
@@ -954,35 +1033,29 @@ static json_result_t _GetValue(json_parser_t* self)
         {
             json_union_t un;
 
-            if (_Expect(self, JSON_STRLIT("alse")) != 0)
-                RETURN(JSON_BAD_SYNTAX);
+            if (_Expect(parser, JSON_STRLIT("alse")) != 0)
+                RAISE(JSON_BAD_SYNTAX);
 
             un.boolean = 0;
 
-            if ((r = _invoke_callback(
-                self,
+            CHECK(_invoke_callback(
+                parser,
                 JSON_REASON_VALUE,
                 JSON_TYPE_BOOLEAN,
-                &un)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+                &un));
 
             break;
         }
         case 'n':
         {
-            if (_Expect(self, JSON_STRLIT("ull")) != 0)
-                RETURN(JSON_BAD_SYNTAX);
+            if (_Expect(parser, JSON_STRLIT("ull")) != 0)
+                RAISE(JSON_BAD_SYNTAX);
 
-            if ((r = _invoke_callback(
-                self,
+            CHECK(_invoke_callback(
+                parser,
                 JSON_REASON_VALUE,
                 JSON_TYPE_NULL,
-                NULL)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+                NULL));
 
             break;
         }
@@ -990,53 +1063,40 @@ static json_result_t _GetValue(json_parser_t* self)
         {
             json_union_t un;
 
-            if (_Expect(self, JSON_STRLIT("rue")) != 0)
-                RETURN(JSON_BAD_SYNTAX);
+            if (_Expect(parser, JSON_STRLIT("rue")) != 0)
+                RAISE(JSON_BAD_SYNTAX);
 
             un.boolean = 1;
 
-            if ((r = _invoke_callback(
-                self,
+            CHECK(_invoke_callback(
+                parser,
                 JSON_REASON_VALUE,
                 JSON_TYPE_BOOLEAN,
-                &un)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+                &un));
 
             break;
         }
         case '{':
         {
-            if ((r = _GetObject(self)) != JSON_OK)
-            {
-                RETURN(r);
-            }
-
+            CHECK(_GetObject(parser));
             break;
         }
         case '[':
         {
-            if ((r = _invoke_callback(
-                self,
+            CHECK(_invoke_callback(
+                parser,
                 JSON_REASON_BEGIN_ARRAY,
                 JSON_TYPE_NULL,
-                NULL)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+                NULL));
 
-            if ((r = _GetArray(self)) != JSON_OK)
-                RETURN(JSON_BAD_SYNTAX);
+            if (_GetArray(parser) != JSON_OK)
+                RAISE(JSON_BAD_SYNTAX);
 
-            if ((r = _invoke_callback(
-                self,
+            CHECK(_invoke_callback(
+                parser,
                 JSON_REASON_END_ARRAY,
                 JSON_TYPE_NULL,
-                NULL)) != JSON_OK)
-            {
-                RETURN(r);
-            }
+                NULL));
 
             break;
         }
@@ -1044,18 +1104,14 @@ static json_result_t _GetValue(json_parser_t* self)
         {
             json_union_t un;
 
-            if ((r = _GetString(self, (char**)&un.string)) != JSON_OK)
-                RETURN(JSON_BAD_SYNTAX);
+            if (_GetString(parser, (char**)&un.string) != JSON_OK)
+                RAISE(JSON_BAD_SYNTAX);
 
-            if ((r = _invoke_callback(
-                self,
+            CHECK(_invoke_callback(
+                parser,
                 JSON_REASON_VALUE,
                 JSON_TYPE_STRING,
-                &un)) != JSON_OK)
-            {
-                RETURN(r);
-            }
-
+                &un));
             break;
         }
         default:
@@ -1063,78 +1119,75 @@ static json_result_t _GetValue(json_parser_t* self)
             json_type_t type;
             json_union_t un;
 
-            self->ptr--;
+            parser->ptr--;
 
-            if ((r = _GetNumber(self, &type, &un)) != JSON_OK)
-                RETURN(JSON_BAD_SYNTAX);
+            if (_GetNumber(parser, &type, &un) != JSON_OK)
+                RAISE(JSON_BAD_SYNTAX);
 
-            if ((r = _invoke_callback(
-                self,
-                JSON_REASON_VALUE,
-                type,
-                &un)) != JSON_OK)
-            {
-                RETURN(r);
-            }
-
+            CHECK(_invoke_callback(parser, JSON_REASON_VALUE, type, &un));
             break;
         }
     }
 
-    return JSON_OK;
+done:
+    return result;
 }
 
 json_result_t json_parser_init(
-    json_parser_t* self,
+    json_parser_t* parser,
     char* data,
     size_t size,
     json_parser_callback_t callback,
     void* callback_data,
     json_allocator_t* allocator)
 {
-    if (!self || !data || !size || !callback)
+    if (!parser || !data || !size || !callback)
         return JSON_BAD_PARAMETER;
 
     if (!allocator || !allocator->ja_malloc || !allocator->ja_free)
         return JSON_BAD_PARAMETER;
 
-    _memset(self, 0, sizeof(json_parser_t));
-    self->data = data;
-    self->ptr = data;
-    self->end = data + size;
-    self->callback = callback;
-    self->callback_data = callback_data;
+    _memset(parser, 0, sizeof(json_parser_t));
+    parser->data = data;
+    parser->ptr = data;
+    parser->end = data + size;
+    parser->callback = callback;
+    parser->callback_data = callback_data;
 
     return JSON_OK;
 }
 
-json_result_t json_parser_parse(json_parser_t* self)
+json_result_t json_parser_parse(json_parser_t* parser)
 {
+    json_result_t result = JSON_OK;
     char c;
 
     /* Check parameters */
-    if (!self)
+    if (!parser)
         return JSON_BAD_PARAMETER;
 
     /* Expect '{' */
     {
         /* Skip whitespace */
-        while (self->ptr != self->end && _isspace(*self->ptr))
-            self->ptr++;
+        while (parser->ptr != parser->end && _isspace(*parser->ptr))
+            parser->ptr++;
 
         /* Fail if output exhausted */
-        if (self->ptr == self->end)
-            RETURN(JSON_EOF);
+        if (parser->ptr == parser->end)
+            RAISE(JSON_EOF);
 
         /* Read the next character */
-        c = *self->ptr++;
+        c = *parser->ptr++;
 
         /* Expect object-begin */
         if (c != '{')
             return JSON_BAD_SYNTAX;
     }
 
-    return _GetObject(self);
+    CHECK(_GetObject(parser));
+
+done:
+    return result;
 }
 
 static int _strtou64(uint64_t* x, const char* str)
@@ -1174,7 +1227,7 @@ json_result_t json_match(
         else if (!(ptr = parser->allocator->ja_malloc(pattern_len + 1)))
             RAISE(JSON_OUT_OF_MEMORY);
 
-        _strcpy(ptr, pattern);
+        _strlcpy(ptr, pattern, pattern_len + 1);
     }
 
     /* Split the pattern into tokens */
