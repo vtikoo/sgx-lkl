@@ -34,37 +34,20 @@
 
 const char* arg0;
 
-static const char* _reasons[] =
-{
-    "None",
-    "Name",
-    "BeginObject",
-    "EndObject",
-    "BeginArray",
-    "EndArray",
-    "Value"
-};
-
-static const char* _types[] =
-{
-    "Null",
-    "Boolean",
-    "Integer",
-    "Real",
-    "String"
-};
-
-typedef struct _CallbackData
+typedef struct _callback_data
 {
     int depth;
     int newline;
     int comma;
+    char* ptr;
+    size_t size;
+    FILE* stream;
 }
-CallbackData;
+callback_data_t;
 
-static void _PrintString(const char* str)
+static void _print_string(const char* str, callback_data_t* cd)
 {
-    printf("\"");
+    fprintf(cd->stream, "\"");
 
     while (*str)
     {
@@ -73,125 +56,105 @@ static void _PrintString(const char* str)
         switch (c)
         {
             case '"':
-                printf("\\\"");
+                fprintf(cd->stream, "\\\"");
                 break;
             case '\\':
-                printf("\\\\");
+                fprintf(cd->stream, "\\\\");
                 break;
             case '\b':
-                printf("\\b");
+                fprintf(cd->stream, "\\b");
                 break;
             case '\f':
-                printf("\\f");
+                fprintf(cd->stream, "\\f");
                 break;
             case '\n':
-                printf("\\n");
+                fprintf(cd->stream, "\\n");
                 break;
             case '\r':
-                printf("\\r");
+                fprintf(cd->stream, "\\r");
                 break;
             case '\t':
-                printf("\\t");
+                fprintf(cd->stream, "\\t");
                 break;
             default:
             {
                 if (isprint(c))
-                    printf("%c", c);
+                    fprintf(cd->stream, "%c", c);
                 else
-                    printf("\\u%04X", c);
+                    fprintf(cd->stream, "\\u%04X", c);
             }
         }
     }
 
-    printf("\"");
+    fprintf(cd->stream, "\"");
 }
 
-static void _PrintValue(json_type_t type, const json_union_t* value)
+static void _print_value(
+    json_type_t type,
+    const json_union_t* value,
+    callback_data_t* cd)
 {
     switch (type)
     {
         case JSON_TYPE_NULL:
-            printf("null");
+            fprintf(cd->stream, "null");
             break;
         case JSON_TYPE_BOOLEAN:
-            printf("%s", value->boolean ? "true" : "false");
+            fprintf(cd->stream, "%s", value->boolean ? "true" : "false");
             break;
         case JSON_TYPE_INTEGER:
-            printf("%lld", value->integer);
+            fprintf(cd->stream, "%lld", value->integer);
             break;
         case JSON_TYPE_REAL:
-            printf("%E", value->real);
+            fprintf(cd->stream, "%E", value->real);
             break;
         case JSON_TYPE_STRING:
-#if 1
-            _PrintString(value->string);
-#else
-            printf("\"%s\"", value->u.string);
-            (void)_PrintString;
-#endif
+            _print_string(value->string, cd);
             break;
         default:
             break;
     }
 }
 
-void DumpCallbackParameters(
-    json_parser_t* parser,
-    json_reason_t reason,
-    json_type_t type,
-    const json_union_t* value,
-    void* callbackData)
-{
-    printf("reason{%s}\n", _reasons[reason]);
-
-    if (reason == JSON_REASON_VALUE)
-    {
-        printf("type{%s}\n", _types[type]);
-        printf("value{");
-        _PrintValue(type, value);
-        printf("}\n");
-    }
-}
-
-static void _Indent(int depth)
+static void _indent(int depth, callback_data_t* cd)
 {
     size_t i;
 
     for (i = 0; i < depth; i++)
-        printf("  ");
+        fprintf(cd->stream, "  ");
 }
 
-json_result_t _Callback(
+static json_result_t _callback(
     json_parser_t* parser,
     json_reason_t reason,
     json_type_t type,
     const json_union_t* un,
-    void* callbackData)
+    void* cd_)
 {
-    CallbackData* data = (CallbackData*)callbackData;
+    callback_data_t* cd= (callback_data_t*)cd_;
 
     /* Print commas */
     if (reason != JSON_REASON_END_ARRAY &&
         reason != JSON_REASON_END_OBJECT &&
-        data->comma)
+        cd->comma)
     {
-        data->comma = 0;
-        printf(",");
+        cd->comma = 0;
+        fprintf(cd->stream, ",");
     }
 
     /* Decrease depth */
     if (reason == JSON_REASON_END_OBJECT ||
         reason == JSON_REASON_END_ARRAY)
     {
-        data->depth--;
+        cd->depth--;
     }
 
     /* Print newline */
-    if (data->newline)
+    if (cd->newline)
     {
-        data->newline = 0;
-        printf("\n");
-        _Indent(data->depth);
+        cd->newline = 0;
+        fprintf(cd->stream, "\n");
+        _indent(cd->depth, cd);
     }
 
     switch (reason)
@@ -203,46 +166,46 @@ json_result_t _Callback(
         }
         case JSON_REASON_NAME:
         {
-            _PrintString(un->string);
-            printf(": ");
-            data->comma = 0;
+            _print_string(un->string, cd);
+            fprintf(cd->stream, ": ");
+            cd->comma = 0;
             break;
         }
         case JSON_REASON_BEGIN_OBJECT:
         {
-            data->depth++;
-            data->newline = 1;
-            data->comma = 0;
-            printf("{");
+            cd->depth++;
+            cd->newline = 1;
+            cd->comma = 0;
+            fprintf(cd->stream, "{");
             break;
         }
         case JSON_REASON_END_OBJECT:
         {
-            data->newline = 1;
-            data->comma = 1;
-            printf("}");
+            cd->newline = 1;
+            cd->comma = 1;
+            fprintf(cd->stream, "}");
             break;
         }
         case JSON_REASON_BEGIN_ARRAY:
         {
-            data->depth++;
-            data->newline = 1;
-            data->comma = 0;
-            printf("[");
+            cd->depth++;
+            cd->newline = 1;
+            cd->comma = 0;
+            fprintf(cd->stream, "[");
             break;
         }
         case JSON_REASON_END_ARRAY:
         {
-            data->newline = 1;
-            data->comma = 1;
-            printf("]");
+            cd->newline = 1;
+            cd->comma = 1;
+            fprintf(cd->stream, "]");
             break;
         }
         case JSON_REASON_VALUE:
         {
-            data->newline = 1;
-            data->comma = 1;
-            _PrintValue(type, un);
+            cd->newline = 1;
+            cd->comma = 1;
+            _print_value(type, un, cd);
             break;
         }
     }
@@ -251,14 +214,14 @@ json_result_t _Callback(
     if (reason == JSON_REASON_END_OBJECT ||
         reason == JSON_REASON_END_ARRAY)
     {
-        if (data->depth == 0)
-            printf("\n");
+        if (cd->depth == 0)
+            fprintf(cd->stream, "\n");
     }
 
     return JSON_OK;
 }
 
-int _load_file(
+static int _load_file(
     const char* path,
     size_t extra_bytes,
     void** data_out,
@@ -312,22 +275,33 @@ done:
     return ret;
 }
 
+static void _trace(
+    json_parser_t* parser,
+    const char* file,
+    unsigned int line,
+    const char* func,
+    const char* message)
+{
+    (void)parser;
+    fprintf(stderr, "TRACE: %s(%u): %s(): %s\n", file, line, func, message);
+}
+
 static void _parse(const char* path)
 {
     json_parser_t parser;
     char* data;
     size_t size;
     json_result_t r;
-    CallbackData callbackData;
+    callback_data_t cd;
     static json_allocator_t allocator =
     {
         malloc,
         free,
     };
 
-    callbackData.depth = 0;
-    callbackData.newline = 0;
-    callbackData.comma = 0;
+    cd.depth = 0;
+    cd.newline = 0;
+    cd.comma = 0;
 
     if (_load_file(path, 1, (void**)&data, &size) != 0)
     {
@@ -335,12 +309,20 @@ static void _parse(const char* path)
         exit(1);
     }
 
-    if ((r = json_parser_init(&parser, data, size, _Callback,
-        &callbackData, &allocator)) != JSON_OK)
+    if (!(cd.stream = open_memstream(&cd.ptr, &cd.size)))
+    {
+        fprintf(stderr, "%s: open_memstream() failed\n", arg0);
+        exit(1);
+    }
+
+    if ((r = json_parser_init(&parser, data, size, _callback,
+        &cd, &allocator)) != JSON_OK)
     {
         fprintf(stderr, "%s: json_parser_init() failed: %d\n", arg0, r);
         exit(1);
     }
+
+    parser.trace = _trace;
 
     if ((r = json_parser_parse(&parser)) != JSON_OK)
     {
@@ -348,11 +330,15 @@ static void _parse(const char* path)
         exit(1);
     }
 
-    if (callbackData.depth != 0)
+    if (cd.depth != 0)
     {
         fprintf(stderr, "%s: unterminated objects\n", arg0);
         exit(1);
     }
+
+    fclose(cd.stream);
+
+    printf("%s", cd.ptr);
 }
 
 int main(int argc, char** argv)

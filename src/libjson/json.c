@@ -471,25 +471,6 @@ typedef struct _intstr_buf
     char data[32];
 } intstr_buf_t;
 
-static const char* _u64tostr(intstr_buf_t* buf, uint64_t x, size_t* size)
-{
-    char* p;
-    char* end = buf->data + sizeof(buf->data) - 1;
-
-    p = end;
-    *p = '\0';
-
-    do
-    {
-        *--p = (char)('0' + x % 10);
-    } while (x /= 10);
-
-    if (size)
-        *size = (size_t)(end - p);
-
-    return p;
-}
-
 static size_t _strlcpy(char* dest, const char* src, size_t size)
 {
     const char* start = src;
@@ -560,11 +541,10 @@ void __json_trace_result(
     const char* func,
     json_result_t result)
 {
-    intstr_buf_t buf;
     char message[64];
 
-    _strlcpy(message, "result=", sizeof(message));
-    _strlcat(message, _u64tostr(&buf, result, NULL), sizeof(message));
+    _strlcpy(message, "result: ", sizeof(message));
+    _strlcat(message, json_result_string(result), sizeof(message));
     __json_trace(parser, file, line, func, message);
 }
 

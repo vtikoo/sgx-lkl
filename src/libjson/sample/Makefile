@@ -1,7 +1,7 @@
 TARGET = jsonsample
 CFLAGS = -Wall -Werror
 INCLUDES = -I../include
-LDFLAGS = -L.. -ljson
+LDFLAGS = -L.. -ljsonprint -ljson
 
 $(TARGET): main.c ../libjson.a
 	gcc $(CFLAGS) $(INCLUDES) -c main.c

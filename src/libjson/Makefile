@@ -1,5 +1,3 @@
-TARGET = libjson.a
-
 CFLAGS += -g
 CFLAGS += -O3
 CFLAGS += -Wall
@@ -11,16 +9,13 @@ INCLUDES += -Iinclude
 
 SOURCES += $(wildcard *.c)
 
-HEADERS += include/json.h
-
 OBJECTS = $(SOURCES:.c=.o)
 
-all: $(TARGET) dirs
+HEADERS += include/json.h include/jsonprint.h
 
-$(TARGET): $(OBJECTS)
-	ar rv $(TARGET) $(OBJECTS)
-
-dirs:
+all: $(OBJECTS)
+	ar rv libjson.a json.o
+	ar rv libjsonprint.a jsonprint.o
 	$(MAKE) -C jsonprint
 	$(MAKE) -C sample
 
@@ -29,7 +24,7 @@ dirs:
 
 
 clean:
-	rm -rf $(OBJECTS) $(TARGET)
+	rm -rf $(OBJECTS) libjsonprint.a libjson.a
 	$(MAKE) -C jsonprint clean
 	$(MAKE) -C sample clean
 
