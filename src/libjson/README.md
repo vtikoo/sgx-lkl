@@ -10,7 +10,7 @@ Samples
 
 The **sample** directory uses the parser to populate a multi-level C structure.
 
-The **jsonprint** formats JSON source and prints it to standard output.
+The **jsonprint** sample formats JSON source and prints it to standard output.
 
 Building
 ========

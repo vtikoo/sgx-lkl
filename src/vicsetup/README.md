@@ -30,6 +30,14 @@ The **vicsetup** program is a test driver and provides similar capability to
 veritysetup, integritysetup, and cryptsetup. It is limited and mainly intended
 as a tool for testing **libvicsetup**.
 
+libcryptsetup.h
+===============
+
+The **libcryptsetup.h** header provides a compatibility interface for making
+integration easier with programs already using **libcryptsetup**. This header
+only implements a subset of features (it implements only what is needed
+by **src/lkl/setup.c**).
+
 Building
 ========
 
