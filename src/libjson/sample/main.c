@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <json.h>
+#include <jsonprint.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <stdint.h>
@@ -768,6 +769,11 @@ static void _parse(const char* path)
     json_result_t r;
     header_t header;
     json_callback_data_t callback_data = { &header };
+    static json_allocator_t allocator =
+    {
+        malloc,
+        free,
+    };
 
     memset(&header, 0, sizeof(header));
 
@@ -782,7 +788,8 @@ static void _parse(const char* path)
         data,
         size,
         _json_read_callback,
-        &callback_data)) != JSON_OK)
+        &callback_data,
+        &allocator)) != JSON_OK)
     {
         fprintf(stderr, "%s: json_parser_init() failed: %d\n", arg0, r);
         exit(1);

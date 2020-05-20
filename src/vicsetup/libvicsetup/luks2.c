@@ -21,6 +21,7 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 #include <json.h>
+#include <jsonprint.h>
 
 #include "luks2.h"
 #include "vic.h"
@@ -1926,6 +1927,11 @@ int luks2_read_hdr(vic_blockdev_t* dev, luks2_hdr_t** hdr_out)
     /* Parse and read the JSON elements */
     {
         json_parser_t parser;
+        static json_allocator_t allocator =
+        {
+            malloc,
+            free,
+        };
 
         json_callback_data_t callback_data = { ext, 0, { 0 } };
 
@@ -1943,7 +1949,8 @@ int luks2_read_hdr(vic_blockdev_t* dev, luks2_hdr_t** hdr_out)
             data,
             ext->json_size,
             _json_read_callback,
-            &callback_data) != JSON_OK)
+            &callback_data,
+            &allocator) != JSON_OK)
         {
             GOTO(done);
         }

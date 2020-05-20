@@ -319,6 +319,11 @@ static void _parse(const char* path)
     size_t size;
     json_result_t r;
     CallbackData callbackData;
+    static json_allocator_t allocator =
+    {
+        malloc,
+        free,
+    };
 
     callbackData.depth = 0;
     callbackData.newline = 0;
@@ -330,8 +335,8 @@ static void _parse(const char* path)
         exit(1);
     }
 
-    if ((r = json_parser_init(&parser, data, size, _Callback, 
-        &callbackData)) != JSON_OK)
+    if ((r = json_parser_init(&parser, data, size, _Callback,
+        &callbackData, &allocator)) != JSON_OK)
     {
         fprintf(stderr, "%s: json_parser_init() failed: %d\n", arg0, r);
         exit(1);
@@ -339,7 +344,7 @@ static void _parse(const char* path)
 
     if ((r = json_parser_parse(&parser)) != JSON_OK)
     {
-        fprintf(stderr, "%s: json_parser_init() failed: %d\n", arg0, r);
+        fprintf(stderr, "%s: json_parser_parse() failed: %d\n", arg0, r);
         exit(1);
     }
 

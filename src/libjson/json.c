@@ -26,70 +26,532 @@
 */
 
 #include "json.h"
+#include "raise.h"
 
-#include <ctype.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stddef.h>
+/*
+**==============================================================================
+**
+** libc compatibility:
+**
+**==============================================================================
+*/
+
+typedef _Bool bool;
+
+#define false ((bool)0)
+#define true ((bool)1)
+
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
+
+#define UINT64_MAX (0xffffffffffffffffu)
+#define LONG_MAX 0x7fffffffffffffffL
+#define ULONG_MAX (2UL * LONG_MAX + 1)
+
+typedef unsigned int uint32_t;
+typedef unsigned long uint64_t;
+typedef long ptrdiff_t;
+typedef unsigned long size_t;
+typedef unsigned int uint32_t;
+
+static int _tolower(int c)
+{
+    return (c >= 'A' && c <= 'Z') ? (c - ' ') : c;
+}
+
+static int _isdigit(int c)
+{
+    return (c >= '0' && c <= '9');
+}
+
+static int _isspace(int c)
+{
+    return c == ' ' || c == '\f' || c == '\n' ||
+        c == '\r' || c == '\t' || c == '\v';
+}
+
+static void* _memset(void* s, int c, size_t n)
+{
+    unsigned char* p = (unsigned char*)s;
+
+    while (n--)
+        *p++ = c;
+
+    return s;
+}
+
+static void* _memcpy(void* dest, const void* src, size_t n)
+{
+    unsigned char* p = (unsigned char*)dest;
+    unsigned char* q = (unsigned char*)src;
+
+    while (n--)
+        *p++ = *q++;
+
+    return dest;
+}
+
+static int _memcmp(const void* s1, const void* s2, size_t n)
+{
+    unsigned char* p = (unsigned char*)s1;
+    unsigned char* q = (unsigned char*)s2;
+
+    while (n--)
+    {
+        if (*p < *q)
+            return -1;
+        else if (*p > *q)
+            return 1;
+
+        p++;
+        q++;
+    }
+
+    return 0;
+}
+
+static void* _memmove(void* dest_, const void* src_, size_t n)
+{
+    char *dest = (char*)dest_;
+    const char *src = (const char*)src_;
+
+    if (dest != src && n > 0)
+    {
+        if (dest <= src)
+        {
+            _memcpy(dest, src, n);
+        }
+        else
+        {
+            for (src += n, dest += n; n--; dest--, src--)
+                dest[-1] = src[-1];
+        }
+    }
+
+    return dest;
+}
+
+static size_t _strlen(const char* s)
+{
+    const char* p = (const char*)s;
+
+    while (*p++)
+        ;
+
+    return p - s;
+}
+
+static int _strcmp(const char* s1, const char* s2)
+{
+    while ((*s1 && *s2) && (*s1 == *s2))
+    {
+        s1++;
+        s2++;
+    }
+
+    return *s1 - *s2;
+}
+
+static char* _strcpy(char* dest, const char* src)
+{
+    char* ret = dest;
+
+    while (*src)
+        *dest++ = *src++;
+
+    *dest = '\0';
+
+    return ret;
+}
+
+static char* _strchr(const char* s, int c)
+{
+    while (*s && *s != c)
+        s++;
+
+    if (*s == c)
+        return (char*)s;
+
+    return NULL;
+}
+
+static size_t _strspn(const char* s, const char* accept)
+{
+    const char* p = s;
+
+    while (*p)
+    {
+        if (!_strchr(accept, *p))
+            break;
+        p++;
+    }
+
+    return (size_t)(p - s);
+}
+
+static size_t _strcspn(const char* s, const char* reject)
+{
+    const char* p = s;
+
+    while (*p)
+    {
+        if (_strchr(reject, *p))
+            break;
+        p++;
+    }
+
+    return (size_t)(p - s);
+}
+
+//
+// If c is a digit character:
+//     then: _digit[c] yields the integer value for that digit character.
+//     else: _digit[c] yields 0xFF.
+//
+// Digit characters fall within these ranges: ['0'-'9'] and ['A'-'Z'].
+//
+// Examples:
+//     _digit['9'] => 9
+//     _digit['A'] => 10
+//     _digit['Z'] => 35
+//     _digit['?'] => 0xFF
+//
+static const unsigned char _digit[256] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c,
+    0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14,
+    0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+    0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF,
+};
+
+/* Return true if c is a digit character with the given base */
+static bool _isdigit2(char c, int base)
+{
+    return _digit[(unsigned char)c] < base;
+}
+
+static long int _strtol(const char* nptr, char** endptr, int base)
+{
+    const char* p;
+    unsigned long x = 0;
+    bool negative = false;
+
+    if (endptr)
+        *endptr = (char*)nptr;
+
+    if (!nptr || base < 0)
+        return 0;
+
+    /* Set scanning pointer to nptr */
+    p = nptr;
+
+    /* Skip any leading whitespace */
+    while (_isspace(*p))
+        p++;
+
+    /* Handle '+' and '-' */
+    if (p[0] == '+')
+    {
+        p++;
+    }
+    else if (p[0] == '-')
+    {
+        negative = true;
+        p++;
+    }
+
+    /* If base is zero, deduce the base from the prefix. */
+    if (base == 0)
+    {
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))
+        {
+            base = 16;
+        }
+        else if (p[0] == '0')
+        {
+            base = 8;
+        }
+        else
+        {
+            base = 10;
+        }
+    }
+
+    /* Remove any base 16 prefix. */
+    if (base == 16)
+    {
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))
+        {
+            p += 2;
+        }
+    }
+
+    /* Remove any base 8 prefix. */
+    if (base == 8)
+    {
+        if (p[0] == '0')
+        {
+            p++;
+        }
+    }
+
+    for (; *p && _isdigit2(*p, base); p++)
+    {
+        /* Multiply by base */
+        {
+            /* Check for overflow */
+            if (x > UINT64_MAX / (unsigned long)base)
+            {
+                if (endptr)
+                    *endptr = (char*)p;
+
+                return UINT64_MAX;
+            }
+
+            x = x * (unsigned long)base;
+        }
+
+        /* Add digit */
+        {
+            const unsigned long digit = _digit[(unsigned char)*p];
+
+            /* Check for overflow */
+            if (digit > ULONG_MAX - x)
+            {
+                if (endptr)
+                    *endptr = (char*)p;
+
+                return UINT64_MAX;
+            }
+
+            x += digit;
+        }
+    }
+
+    /* Return zero if no digits were found */
+    if (p == nptr)
+        return 0;
+
+    if (endptr)
+        *endptr = (char*)p;
+
+    /* Invert if negative */
+    if (negative)
+    {
+        if (x > LONG_MAX)
+        {
+            if (x == (unsigned long)LONG_MAX + 1)
+                return x;
+            else
+                return 0;
+        }
+        x = (unsigned long)-(long)x;
+    }
+
+    return (long)x;
+}
+
+static unsigned long int _strtoul(const char* nptr, char** endptr, int base)
+{
+    return (unsigned long)_strtol(nptr, endptr, base);
+}
+
+static double _strtod(const char* nptr, char** endptr)
+{
+    const char* p;
+    bool negative = false;
+    bool exp_negative = false;
+    unsigned long x;
+    unsigned long y = 0;
+    unsigned long r = 1;
+    unsigned long exp = 0;
+    bool have_x = false;
+    double z;
+
+    if (endptr)
+        *endptr = (char*)nptr;
+
+    if (!nptr)
+        return 0.0;
+
+    /* Set scanning pointer to nptr */
+    p = nptr;
+
+    /* Skip any leading whitespace */
+    while (_isspace(*p))
+        p++;
+
+    /* Handle '+' and '-' */
+    if (p[0] == '+')
+    {
+        p++;
+    }
+    else if (p[0] == '-')
+    {
+        negative = true;
+        p++;
+    }
+
+    /* Parse the leading number */
+    {
+        char* end;
+        x = _strtoul(p, &end, 10);
+
+        if (p != end)
+        {
+            have_x = true;
+            *endptr = (char*)end;
+        }
+
+        p = end;
+    }
+
+    /* Parse the decimal and trailing number */
+    if (*p == '.')
+    {
+        char* end;
+
+        p++;
+        y = _strtoul(p, &end, 10);
+
+        if (p != end)
+        {
+            size_t n;
+            *endptr = (char*)end;
+
+            /* Calculate the number of decimal places */
+            n = end - p;
+            p = end;
+
+            /* Find a divisor */
+            while (n--)
+                r *= 10;
+        }
+        else if (have_x)
+        {
+            *endptr = (char*)p;
+        }
+        else
+        {
+            *endptr = (char*)(p - 1);
+            return 0.0;
+        }
+    }
+
+    /* Handle exponent if any */
+    if (*p == 'e' || *p == 'E')
+    {
+        char* end;
+        p++;
+
+        if (*p == '-')
+            exp_negative = true;
+
+        if (*p == '-' || *p == '+')
+            p++;
+
+        exp = _strtoul(p, &end, 10);
+
+        if (p != end)
+            *endptr = (char*)end;
+
+        p = end;
+    }
+
+    z = (double)x + ((double)y / (double)r);
+
+    if (exp)
+    {
+        for (size_t i = 0; i < exp; i++)
+        {
+            if (exp_negative)
+                z /= 10;
+            else
+                z *= 10;
+        }
+    }
+
+    return negative ? -z : z;
+}
+
+/*
+**==============================================================================
+**
+** JSON paraser implementation:
+**
+**==============================================================================
+*/
 
 #define JSON_STRLIT(STR) STR, sizeof(STR)-1
 
-#if 0
-#define RETURN(VALUE) return VALUE
-#else
 #define RETURN(VALUE)                                                       \
     do                                                                      \
     {                                                                       \
-        printf("RETURN: %s(%u): %s()\n", __FILE__, __LINE__, __FUNCTION__); \
-        fflush(stdout);                                                     \
         return VALUE;                                                       \
     }                                                                       \
     while (0)
-#endif
 
-#define TRACE_RAISE
-
-#define RAISE(RAISE)                                      \
-    do                                                     \
-    {                                                      \
-        result = RAISE;                                   \
-        __raise(__FILE__, __LINE__, __FUNCTION__, result); \
-        fflush(stdout);                                    \
-        goto done;                                         \
-    }                                                      \
-    while (0)
-
-#define CHECK(RAISE)                                          \
-    do                                                         \
-    {                                                          \
-        json_result_t _r_ = RAISE;                            \
-        if (_r_ != JSON_OK)                                    \
-        {                                                      \
-            result = _r_;                                      \
-            __raise(__FILE__, __LINE__, __FUNCTION__, result); \
-            goto done;                                         \
-        }                                                      \
-    }                                                          \
-    while (0)
-
-static __inline__ void __raise(
-    const char* file,
-    uint32_t line,
-    const char* func,
-    json_result_t result)
+static size_t _split(
+    char* str,
+    const char* delim,
+    const char* tokens[],
+    size_t ntokens)
 {
-#ifdef TRACE_RAISE
-    const char* str = json_result_string(result);
-    printf("RAISE: %s(%u): %s(): %s(%u)\n", file, line, func, str, result);
-    fflush(stdout);
-#endif
+    char* p = (char*)str;
+    size_t i = 0;
+
+    for (;;)
+    {
+        /* Skip leading delimiting characters */
+        p += _strspn(p, delim);
+
+        /* Terminate if at end of string */
+        if (!*p)
+            break;
+
+        /* Check for overflow */
+        if (i == ntokens)
+            return (size_t)-1;
+
+        /* Add token to the array */
+        tokens[i++] = p;
+
+        /* Skip over non-delimiting characters */
+        p += _strcspn(p, delim);
+
+        if (!*p)
+            break;
+
+        *p++ = '\0';
+    }
+
+    if (*p)
+        return (size_t)-1;
+
+    return i;
 }
 
 static unsigned char _CharToHexNibble(char c)
 {
-    c = tolower(c);
+    c = _tolower(c);
 
     if (c >= '0' && c <= '9')
         return c - '0';
@@ -102,7 +564,7 @@ static unsigned char _CharToHexNibble(char c)
 static int _IsNumberChar(char c)
 {
     return
-        isdigit(c) || c == '-' || c == '+' || c == 'e' || c == 'E' || c == '.';
+        _isdigit(c) || c == '-' || c == '+' || c == 'e' || c == 'E' || c == '.';
 }
 
 static int _IsDecimalOrExponent(char c)
@@ -196,42 +658,42 @@ static json_result_t _GetString(json_parser_t* self, char** str)
                 {
                     case '"':
                         p[-1] = '"';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case '\\':
                         p[-1] = '\\';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case '/':
                         p[-1] = '/';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case 'b':
                         p[-1] = '\b';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case 'f':
                         p[-1] = '\f';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case 'n':
                         p[-1] = '\n';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case 'r':
                         p[-1] = '\r';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case 't':
                         p[-1] = '\t';
-                        memmove(p, p + 1, end - p);
+                        _memmove(p, p + 1, end - p);
                         end--;
                         break;
                     case 'u':
@@ -257,7 +719,7 @@ static json_result_t _GetString(json_parser_t* self, char** str)
                         p[-2] = x;
 
                         /* Remove "uXXXX" */
-                        memmove(p - 1, p + 4, end - p - 3);
+                        _memmove(p - 1, p + 4, end - p - 3);
 
                         p = p - 1;
                         end -= 5;
@@ -286,7 +748,7 @@ static json_result_t _GetString(json_parser_t* self, char** str)
 static int _Expect(json_parser_t* self, const char* str, size_t len)
 {
     if (self->end - self->ptr >= (ptrdiff_t)len &&
-        memcmp(self->ptr, str, len) == 0)
+        _memcmp(self->ptr, str, len) == 0)
     {
         self->ptr += len;
         return 0;
@@ -306,7 +768,7 @@ static json_result_t _GetArray(json_parser_t* self)
     for (;;)
     {
         /* Skip whitespace */
-        while (self->ptr != self->end && isspace(*self->ptr))
+        while (self->ptr != self->end && _isspace(*self->ptr))
             self->ptr++;
 
         /* Fail if output exhausted */
@@ -359,7 +821,7 @@ static json_result_t _GetObject(json_parser_t* self)
     for (;;)
     {
         /* Skip whitespace */
-        while (self->ptr != self->end && isspace(*self->ptr))
+        while (self->ptr != self->end && _isspace(*self->ptr))
             self->ptr++;
 
         /* Fail if output exhausted */
@@ -391,7 +853,7 @@ static json_result_t _GetObject(json_parser_t* self)
             /* Expect: name-separator(':') */
             {
                 /* Skip whitespace */
-                while (self->ptr != self->end && isspace(*self->ptr))
+                while (self->ptr != self->end && _isspace(*self->ptr))
                     self->ptr++;
 
                 /* Fail if output exhausted */
@@ -455,12 +917,12 @@ static json_result_t _GetNumber(
     if (isInteger)
     {
         *type = JSON_TYPE_INTEGER;
-        un->integer = strtoll(start, &end, 10);
+        un->integer = _strtol(start, &end, 10);
     }
     else
     {
         *type = JSON_TYPE_REAL;
-        un->real = strtod(start, &end);
+        un->real = _strtod(start, &end);
     }
 
     if (!end || end != self->ptr)
@@ -476,7 +938,7 @@ static json_result_t _GetValue(json_parser_t* self)
     json_result_t r;
 
     /* Skip whitespace */
-    while (self->ptr != self->end && isspace(*self->ptr))
+    while (self->ptr != self->end && _isspace(*self->ptr))
         self->ptr++;
 
     /* Fail if output exhausted */
@@ -484,7 +946,7 @@ static json_result_t _GetValue(json_parser_t* self)
         RETURN(JSON_EOF);
 
     /* Read the next character */
-    c = tolower(*self->ptr++);
+    c = _tolower(*self->ptr++);
 
     switch (c)
     {
@@ -627,12 +1089,16 @@ json_result_t json_parser_init(
     char* data,
     size_t size,
     json_parser_callback_t callback,
-    void* callback_data)
+    void* callback_data,
+    json_allocator_t* allocator)
 {
     if (!self || !data || !size || !callback)
         return JSON_BAD_PARAMETER;
 
-    memset(self, 0, sizeof(json_parser_t));
+    if (!allocator || !allocator->ja_malloc || !allocator->ja_free)
+        return JSON_BAD_PARAMETER;
+
+    _memset(self, 0, sizeof(json_parser_t));
     self->data = data;
     self->ptr = data;
     self->end = data + size;
@@ -653,7 +1119,7 @@ json_result_t json_parser_parse(json_parser_t* self)
     /* Expect '{' */
     {
         /* Skip whitespace */
-        while (self->ptr != self->end && isspace(*self->ptr))
+        while (self->ptr != self->end && _isspace(*self->ptr))
             self->ptr++;
 
         /* Fail if output exhausted */
@@ -671,247 +1137,11 @@ json_result_t json_parser_parse(json_parser_t* self)
     return _GetObject(self);
 }
 
-static void _Indent(FILE* os, size_t depth)
-{
-    size_t i;
-
-    for (i = 0; i < depth; i++)
-        fprintf(os, "  ");
-}
-
-static void _PrintString(FILE* os, const char* str)
-{
-    fprintf(os, "\"");
-
-    while (*str)
-    {
-        char c = *str++;
-
-        switch (c)
-        {
-            case '"':
-                fprintf(os, "\\\"");
-                break;
-            case '\\':
-                fprintf(os, "\\\\");
-                break;
-            case '/':
-                fprintf(os, "\\/");
-                break;
-            case '\b':
-                fprintf(os, "\\b");
-                break;
-            case '\f':
-                fprintf(os, "\\f");
-                break;
-            case '\n':
-                fprintf(os, "\\n");
-                break;
-            case '\r':
-                fprintf(os, "\\r");
-                break;
-            case '\t':
-                fprintf(os, "\\t");
-                break;
-            default:
-            {
-                if (isprint(c))
-                    fprintf(os, "%c", c);
-                else
-                    fprintf(os, "\\u%04X", c);
-            }
-        }
-    }
-
-    fprintf(os, "\"");
-}
-
-void json_print_value(FILE* os, json_type_t type, const json_union_t* un)
-{
-    switch (type)
-    {
-        case JSON_TYPE_NULL:
-            fprintf(os, "null");
-            break;
-        case JSON_TYPE_BOOLEAN:
-            fprintf(os, "%s", un->boolean ? "true" : "false");
-            break;
-        case JSON_TYPE_INTEGER:
-            fprintf(os, "%lld", un->integer);
-            break;
-        case JSON_TYPE_REAL:
-            fprintf(os, "%E", un->real);
-            break;
-        case JSON_TYPE_STRING:
-            _PrintString(os, un->string);
-            break;
-        default:
-            break;
-    }
-}
-
-typedef struct callback_data
-{
-    int depth;
-    int newline;
-    int comma;
-    FILE* os;
-}
-callback_data_t;
-
-json_result_t _json_print_callback(
-    json_parser_t* parser,
-    json_reason_t reason,
-    json_type_t type,
-    const json_union_t* un,
-    void* callback_data)
-{
-    callback_data_t* data = callback_data;
-    FILE* os = data->os;
-
-    (void)parser;
-
-    /* Print commas */
-    if (reason != JSON_REASON_END_ARRAY &&
-        reason != JSON_REASON_END_OBJECT &&
-        data->comma)
-    {
-        data->comma = 0;
-        fprintf(os, ",");
-    }
-
-    /* Decrease depth */
-    if (reason == JSON_REASON_END_OBJECT ||
-        reason == JSON_REASON_END_ARRAY)
-    {
-        data->depth--;
-    }
-
-    /* Print newline */
-    if (data->newline)
-    {
-        data->newline = 0;
-        fprintf(os, "\n");
-        _Indent(os, data->depth);
-    }
-
-    switch (reason)
-    {
-        case JSON_REASON_NONE:
-        {
-            /* Unreachable */
-            break;
-        }
-        case JSON_REASON_NAME:
-        {
-            _PrintString(os, un->string);
-            fprintf(os, ": ");
-            data->comma = 0;
-            break;
-        }
-        case JSON_REASON_BEGIN_OBJECT:
-        {
-            data->depth++;
-            data->newline = 1;
-            data->comma = 0;
-            fprintf(os, "{");
-            break;
-        }
-        case JSON_REASON_END_OBJECT:
-        {
-            data->newline = 1;
-            data->comma = 1;
-            fprintf(os, "}");
-            break;
-        }
-        case JSON_REASON_BEGIN_ARRAY:
-        {
-            data->depth++;
-            data->newline = 1;
-            data->comma = 0;
-            fprintf(os, "[");
-            break;
-        }
-        case JSON_REASON_END_ARRAY:
-        {
-            data->newline = 1;
-            data->comma = 1;
-            fprintf(os, "]");
-            break;
-        }
-        case JSON_REASON_VALUE:
-        {
-            data->newline = 1;
-            data->comma = 1;
-            json_print_value(os, type, un);
-            break;
-        }
-    }
-
-    /* Final newline */
-    if (reason == JSON_REASON_END_OBJECT ||
-        reason == JSON_REASON_END_ARRAY)
-    {
-        if (data->depth == 0)
-            fprintf(os, "\n");
-    }
-
-    return JSON_OK;
-}
-
-json_result_t json_print(
-    FILE* os,
-    const char* json_data,
-    size_t json_size)
-{
-    json_result_t result = JSON_UNEXPECTED;
-    char* data = NULL;
-    json_parser_t parser;
-    callback_data_t callback_data = { 0, 0, 0, os };
-
-    if (!json_data || !json_size)
-        RAISE(JSON_BAD_PARAMETER);
-
-    if (!(data = malloc(json_size)))
-        RAISE(JSON_OUT_OF_MEMORY);
-
-    memcpy(data, json_data, json_size);
-
-    if (json_parser_init(
-        &parser,
-        data,
-        json_size,
-        _json_print_callback,
-        &callback_data) != JSON_OK)
-    {
-        RAISE(JSON_FAILED);
-    }
-
-    if (json_parser_parse(&parser) != JSON_OK)
-    {
-        RAISE(JSON_BAD_SYNTAX);
-    }
-
-    if (callback_data.depth != 0)
-    {
-        RAISE(JSON_BAD_SYNTAX);
-    }
-
-    result = JSON_OK;
-
-done:
-
-    if (data)
-        free(data);
-
-    return result;
-}
-
 static int _strtou64(uint64_t* x, const char* str)
 {
     char* end;
 
-    *x = strtoull(str, &end, 10);
+    *x = _strtoul(str, &end, 10);
 
     if (!end || *end != '\0')
         return -1;
@@ -937,28 +1167,21 @@ json_result_t json_match(
 
     /* Make a copy of the pattern that can be modified */
     {
-        pattern_len = strlen(pattern);
+        pattern_len = _strlen(pattern);
 
         if (pattern_len < sizeof(buf))
             ptr = buf;
-        else if (!(ptr = malloc(pattern_len + 1)))
+        else if (!(ptr = parser->allocator->ja_malloc(pattern_len + 1)))
             RAISE(JSON_OUT_OF_MEMORY);
 
-        strcpy(ptr, pattern);
+        _strcpy(ptr, pattern);
     }
 
     /* Split the pattern into tokens */
+    if ((pattern_depth = _split(ptr, ".", pattern_path,
+        JSON_MAX_NESTING)) == (size_t)-1)
     {
-        char* p;
-        char* save;
-
-        for (p = strtok_r(ptr, ".", &save); p; p = strtok_r(NULL, ".", &save))
-        {
-            if (pattern_depth == JSON_MAX_NESTING)
-                RAISE(JSON_NESTING_OVERFLOW);
-
-            pattern_path[pattern_depth++] = p;
-        }
+        RAISE(JSON_NESTING_OVERFLOW);
     }
 
     /* Return false if the path sizes are different */
@@ -971,12 +1194,12 @@ json_result_t json_match(
     /* Compare the elements */
     for (size_t i = 0; i < pattern_depth; i++)
     {
-        if (strcmp(pattern_path[i], "#") == 0)
+        if (_strcmp(pattern_path[i], "#") == 0)
         {
             if (_strtou64(&n, parser->path[i]) != 0)
                 RAISE(JSON_TYPE_MISMATCH);
         }
-        else if (strcmp(pattern_path[i], parser->path[i]) != 0)
+        else if (_strcmp(pattern_path[i], parser->path[i]) != 0)
         {
             result = JSON_NO_MATCH;
             goto done;
@@ -991,7 +1214,7 @@ json_result_t json_match(
 done:
 
     if (ptr && ptr != buf)
-        free(ptr);
+        parser->allocator->ja_free(ptr);
 
     return result;
 }
@@ -1034,20 +1257,4 @@ const char* json_result_string(json_result_t result)
 
     /* Unreachable */
     return "UNKNOWN";
-}
-
-void json_dump_path(const char* path[], size_t depth)
-{
-    if (path)
-    {
-        for (size_t i = 0; i < depth; i++)
-        {
-            printf("%s", path[i]);
-
-            if (i + 1 != depth)
-                printf(".");
-        }
-
-        printf("\n");
-    }
 }

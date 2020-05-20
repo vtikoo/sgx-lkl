@@ -28,8 +28,7 @@
 #ifndef _JSON_H
 #define _JSON_H
 
-#include <stdio.h>
-#include <stdbool.h>
+typedef unsigned long size_t;
 
 #define JSON_MAX_NESTING 256
 
@@ -95,6 +94,13 @@ typedef json_result_t (*json_parser_callback_t)(
     const json_union_t* value,
     void* callback_data);
 
+typedef struct _json_allocator
+{
+    void* (*ja_malloc)(size_t size);
+    void (*ja_free)(void *ptr);
+}
+json_allocator_t;
+
 struct _json_parser
 {
     unsigned int magic;
@@ -105,6 +111,7 @@ struct _json_parser
     void* callback_data;
     const char* path[JSON_MAX_NESTING];
     size_t depth;
+    json_allocator_t* allocator;
 };
 
 json_result_t json_parser_init(
@@ -112,25 +119,14 @@ json_result_t json_parser_init(
     char* data,
     size_t size,
     json_parser_callback_t callback,
-    void* callback_data);
+    void* callback_data,
+    json_allocator_t* allocator);
 
 json_result_t json_parser_parse(json_parser_t* self);
-
-void json_print_value(
-    FILE* os,
-    json_type_t type,
-    const json_union_t* un);
-
-json_result_t json_print(
-    FILE* os,
-    const char* json_data,
-    size_t json_size);
 
 json_result_t json_match(
     json_parser_t* parser,
     const char* pattern,
     unsigned long* index);
-
-void json_dump_path(const char* path[], size_t depth);
 
 #endif /* _JSON_H */

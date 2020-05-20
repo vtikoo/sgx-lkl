@@ -1,5 +1,5 @@
 TARGET = jsonsample
-CFLAGS = -Wall
+CFLAGS = -Wall -Werror
 INCLUDES = -I../include
 LDFLAGS = -L.. -ljson
 

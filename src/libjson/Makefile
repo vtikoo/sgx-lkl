@@ -15,11 +15,18 @@ HEADERS += include/json.h
 
 OBJECTS = $(SOURCES:.c=.o)
 
+all: $(TARGET) dirs
+
 $(TARGET): $(OBJECTS)
 	ar rv $(TARGET) $(OBJECTS)
 
+dirs:
+	$(MAKE) -C jsonprint
+	$(MAKE) -C sample
+
 %.o: %.c $(HEADERS)
 	gcc -c $(CFLAGS) $(DEFINES) $(INCLUDES) -o $@ $<
+
 
 clean:
 	rm -rf $(OBJECTS) $(TARGET)
