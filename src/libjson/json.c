@@ -168,45 +168,6 @@ static char* _strcpy(char* dest, const char* src)
 }
 #endif
 
-static char* _strchr(const char* s, int c)
-{
-    while (*s && *s != c)
-        s++;
-
-    if (*s == c)
-        return (char*)s;
-
-    return NULL;
-}
-
-static size_t _strspn(const char* s, const char* accept)
-{
-    const char* p = s;
-
-    while (*p)
-    {
-        if (!_strchr(accept, *p))
-            break;
-        p++;
-    }
-
-    return (size_t)(p - s);
-}
-
-static size_t _strcspn(const char* s, const char* reject)
-{
-    const char* p = s;
-
-    while (*p)
-    {
-        if (_strchr(reject, *p))
-            break;
-        p++;
-    }
-
-    return (size_t)(p - s);
-}
-
 //
 // If c is a digit character:
 //     then: _digit[c] yields the integer value for that digit character.
@@ -608,43 +569,31 @@ void __json_trace_result(
 }
 
 static size_t _split(
-    char* str,
-    const char* delim,
+    char* s,
+    const char sep,
     const char* tokens[],
-    size_t ntokens)
+    size_t num_tokens)
 {
-    char* p = (char*)str;
-    size_t i = 0;
+    size_t n = 0;
 
     for (;;)
     {
-        /* Skip leading delimiting characters */
-        p += _strspn(p, delim);
-
-        /* Terminate if at end of string */
-        if (!*p)
-            break;
-
-        /* Check for overflow */
-        if (i == ntokens)
+        if (n == num_tokens)
             return (size_t)-1;
 
-        /* Add token to the array */
-        tokens[i++] = p;
+        tokens[n++] = s;
 
-        /* Skip over non-delimiting characters */
-        p += _strcspn(p, delim);
+        /* Skip non-separator characters */
+        while (*s && *s != sep)
+            s++;
 
-        if (!*p)
+        if (!*s)
             break;
 
-        *p++ = '\0';
+        *s++ = '\0';
     }
 
-    if (*p)
-        return (size_t)-1;
-
-    return i;
+    return n;
 }
 
 static unsigned char _CharToHexNibble(char c)
@@ -1231,7 +1180,7 @@ json_result_t json_match(
     }
 
     /* Split the pattern into tokens */
-    if ((pattern_depth = _split(ptr, ".", pattern_path,
+    if ((pattern_depth = _split(ptr, '.', pattern_path,
         JSON_MAX_NESTING)) == (size_t)-1)
     {
         RAISE(JSON_NESTING_OVERFLOW);
