@@ -1,2 +1,4 @@
 *.o
 *.a
+jsonprint/jsonprint
+sample/jsonsample
