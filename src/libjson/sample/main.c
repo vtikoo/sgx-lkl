@@ -157,10 +157,8 @@ static json_result_t _json_read_callback(
                     strcmp(ks->kdf.type, "argon2i") != 0 &&
                     strcmp(ks->kdf.type, "argon2id") != 0)
                 {
-                {
                     result = JSON_UNSUPPORTED;
                     goto done;
-                }
                 }
             }
             else if (json_match(parser, "keyslots.#.kdf.time", &i) == JSON_OK)

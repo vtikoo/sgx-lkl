@@ -109,6 +109,7 @@ struct _json_parser
     char* data;
     char* ptr;
     char* end;
+    int scan;
     json_parser_callback_t callback;
     void* callback_data;
     const char* path[JSON_MAX_NESTING];

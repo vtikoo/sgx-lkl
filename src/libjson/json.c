@@ -594,6 +594,9 @@ static json_result_t _invoke_callback(
     json_type_t type,
     const json_union_t* un)
 {
+    if (parser->scan)
+        return JSON_OK;
+
     return parser->callback(parser, reason, type, un, parser->callback_data);
 }
 
@@ -636,11 +639,16 @@ static json_result_t _get_string(json_parser_t* parser, char** str)
     /* Update the os */
     parser->ptr += p - start + 1;
 
+    /* Skip modification of text if only scanning */
+    if (parser->scan)
+    {
+        result = JSON_OK;
+        goto done;
+    }
+
     /* Overwrite the '"' character */
     *p = '\0';
     end = p;
-
-    /* ATTN.B: store length (end-p) to str[-1] */
 
     /* Process escaped characters (if any) */
     if (escaped)
@@ -763,7 +771,7 @@ static int _expect(json_parser_t* parser, const char* str, size_t len)
 
 static json_result_t _get_value(json_parser_t* parser);
 
-static json_result_t _get_array(json_parser_t* parser)
+static json_result_t _get_array(json_parser_t* parser, size_t* array_size)
 {
     json_result_t result = JSON_OK;
     char c;
@@ -794,6 +802,9 @@ static json_result_t _get_array(json_parser_t* parser)
         {
             parser->ptr--;
             CHECK(_get_value(parser));
+
+            if (array_size)
+                (*array_size)++;
         }
     }
 
@@ -867,7 +878,8 @@ static json_result_t _get_object(json_parser_t* parser)
     if (parser->depth == 0)
         RAISE(JSON_NESTING_UNDERFLOW);
 
-    CHECK(_invoke_callback(parser, JSON_REASON_END_OBJECT, JSON_TYPE_NULL, NULL));
+    CHECK(_invoke_callback(
+        parser, JSON_REASON_END_OBJECT, JSON_TYPE_NULL, NULL));
 
     parser->depth--;
 
@@ -987,20 +999,35 @@ static json_result_t _get_value(json_parser_t* parser)
         }
         case '[':
         {
+            json_union_t un;
+
+            /* Scan ahead to determine the size of the array */
+            {
+                size_t array_size = 0;
+
+                json_parser_t scanner = *parser;
+                scanner.scan = 1;
+
+                if (_get_array(&scanner, &array_size) != JSON_OK)
+                    RAISE(JSON_BAD_SYNTAX);
+
+                un.integer = (signed long long)array_size;
+            }
+
             CHECK(_invoke_callback(
                 parser,
                 JSON_REASON_BEGIN_ARRAY,
-                JSON_TYPE_NULL,
-                NULL));
+                JSON_TYPE_INTEGER,
+                &un));
 
-            if (_get_array(parser) != JSON_OK)
+            if (_get_array(parser, NULL) != JSON_OK)
                 RAISE(JSON_BAD_SYNTAX);
 
             CHECK(_invoke_callback(
                 parser,
                 JSON_REASON_END_ARRAY,
-                JSON_TYPE_NULL,
-                NULL));
+                JSON_TYPE_INTEGER,
+                &un));
 
             break;
         }
