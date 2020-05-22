@@ -1,3 +1,5 @@
+TARGET = libjson.a
+
 CFLAGS += -g
 CFLAGS += -O3
 CFLAGS += -Wall
@@ -7,27 +9,31 @@ CFLAGS += -Wno-type-limits
 
 INCLUDES += -Iinclude
 
-SOURCES += $(wildcard *.c)
+SOURCES += json.c
 
 OBJECTS = $(SOURCES:.c=.o)
 
-HEADERS += include/json.h include/jsonprint.h
+all: $(TARGET) dirs
 
-all: $(OBJECTS)
-	ar rv libjson.a json.o
-	ar rv libjsonprint.a jsonprint.o
+$(TARGET): $(OBJECTS)
+	ar rv $(TARGET) json.o
+
+dirs:
+	$(MAKE) -C sample1
+	$(MAKE) -C sample2
 	$(MAKE) -C jsonprint
-	$(MAKE) -C sample
 
-%.o: %.c $(HEADERS)
+%.o: %.c
 	gcc -c $(CFLAGS) $(DEFINES) $(INCLUDES) -o $@ $<
 
+json.o: include/json.h
 
 clean:
-	rm -rf $(OBJECTS) libjsonprint.a libjson.a
+	rm -rf $(OBJECTS) libjson.a
+	$(MAKE) -C sample1 clean
+	$(MAKE) -C sample2 clean
 	$(MAKE) -C jsonprint clean
-	$(MAKE) -C sample clean
 
 tests:
-	@ $(MAKE) -s -C sample tests
-	@ $(MAKE) -s -C jsonprint tests
+	@ $(MAKE) -s -C sample1 tests
+	@ $(MAKE) -s -C sample2 tests

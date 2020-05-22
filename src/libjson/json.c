@@ -29,6 +29,7 @@
 
 #include "json.h"
 #include "raise.h"
+#include <stdio.h>
 
 /*
 **==============================================================================
@@ -45,6 +46,7 @@
 typedef unsigned long size_t;
 typedef unsigned int uint32_t;
 typedef unsigned long uint64_t;
+typedef long int64_t;
 typedef long ptrdiff_t;
 
 static int _tolower(int c)
@@ -61,6 +63,64 @@ static int _isspace(int c)
 {
     return c == ' ' || c == '\f' || c == '\n' ||
         c == '\r' || c == '\t' || c == '\v';
+}
+
+static int _islower(int c)
+{
+    return (c >= 'a' && c <= 'z');
+}
+
+static int _isupper(int c)
+{
+    return (c >= 'A' && c <= 'Z');
+}
+
+static int _isprint(int c)
+{
+    if (_isdigit(c) || _islower(c) || _isupper(c))
+        return 1;
+
+    switch (c)
+    {
+        case ' ':
+        case '!':
+        case '"':
+        case '#':
+        case '$':
+        case '%':
+        case '&':
+        case '\'':
+        case '(':
+        case ')':
+        case '*':
+        case '+':
+        case ',':
+        case '-':
+        case '.':
+        case '/':
+        case ':':
+        case ';':
+        case '<':
+        case '=':
+        case '>':
+        case '?':
+        case '@':
+        case '[':
+        case '\\':
+        case ']':
+        case '^':
+        case '_':
+        case '`':
+        case '{':
+        case '|':
+        case '}':
+        case '~':
+            return 1;
+        default:
+            break;
+    }
+
+    return 0;
 }
 
 static void* _memset(void* s, int c, size_t n)
@@ -126,12 +186,12 @@ static void* _memmove(void* dest_, const void* src_, size_t n)
 
 static size_t _strlen(const char* s)
 {
-    const char* p = (const char*)s;
+    size_t n = 0;
 
-    while (*p++)
-        ;
+    while (*s++)
+        n++;
 
-    return p - s;
+    return n;
 }
 
 static int _strcmp(const char* s1, const char* s2)
@@ -496,7 +556,7 @@ static double _strtod(const char* nptr, char** endptr)
 **==============================================================================
 */
 
-#define JSON_STRLIT(STR) STR, sizeof(STR)-1
+#define STRLIT(STR) STR, sizeof(STR)-1
 
 void __json_trace(
     json_parser_t* parser,
@@ -956,7 +1016,7 @@ static json_result_t _get_value(json_parser_t* parser)
         {
             json_union_t un;
 
-            if (_expect(parser, JSON_STRLIT("alse")) != 0)
+            if (_expect(parser, STRLIT("alse")) != 0)
                 RAISE(JSON_BAD_SYNTAX);
 
             un.boolean = 0;
@@ -971,7 +1031,7 @@ static json_result_t _get_value(json_parser_t* parser)
         }
         case 'n':
         {
-            if (_expect(parser, JSON_STRLIT("ull")) != 0)
+            if (_expect(parser, STRLIT("ull")) != 0)
                 RAISE(JSON_BAD_SYNTAX);
 
             CHECK(_invoke_callback(
@@ -986,7 +1046,7 @@ static json_result_t _get_value(json_parser_t* parser)
         {
             json_union_t un;
 
-            if (_expect(parser, JSON_STRLIT("rue")) != 0)
+            if (_expect(parser, STRLIT("rue")) != 0)
                 RAISE(JSON_BAD_SYNTAX);
 
             un.boolean = 1;
@@ -1250,4 +1310,398 @@ const char* json_result_string(json_result_t result)
 
     /* Unreachable */
     return "UNKNOWN";
+}
+
+static void _Indent(json_write_t write, void* stream, size_t depth)
+{
+    size_t i;
+
+    for (i = 0; i < depth; i++)
+        (*write)(stream, STRLIT("  "));
+}
+
+static void _byte_to_hex_string(unsigned char c, char hex[3])
+{
+    const unsigned char hi = (c & 0xf0) >> 4;;
+    const unsigned char lo = c & 0x0f;
+
+    hex[0] = (hi >= 0xa) ?  (hi - 0xa + 'A') : (hi + '0');
+    hex[1] = (lo >= 0xa) ?  (lo - 0xa + 'A') : (lo + '0');
+    hex[2] = '\0';
+}
+
+typedef struct _strbuf
+{
+    char data[256];
+}
+strbuf_t;
+
+static const char* _i64tostr(strbuf_t* buf, int64_t x, size_t* size)
+{
+    char* p;
+    int neg = 0;
+    static const char _str[] = "-9223372036854775808";
+    char* end = buf->data + sizeof(buf->data) - 1;
+    const long INT64_MIN = (-1 - 0x7fffffffffffffff);
+
+    if (x == INT64_MIN)
+    {
+        *size = sizeof(_str) - 1;
+        return _str;
+    }
+
+    if (x < 0)
+    {
+        neg = 1;
+        x = -x;
+    }
+
+    p = end;
+    *p = '\0';
+
+    do
+    {
+        *--p = (char)('0' + x % 10);
+    } while (x /= 10);
+
+    if (neg)
+        *--p = '-';
+
+    if (size)
+        *size = (size_t)(end - p);
+
+    return p;
+}
+
+static const char* _dtostr(strbuf_t* buf, double x, size_t* size)
+{
+    strbuf_t whole_buf;
+    strbuf_t frac_buf;
+    const char* whole_str;
+    const char* frac_str;
+
+    long whole = (long)x;
+    double frac = x - whole;
+
+    /* ATTN: precision limited to 10 decimal places */
+    for (size_t i = 0; i < 10; i++)
+        frac *= 10;
+
+    whole_str = _i64tostr(&whole_buf, whole, NULL);
+    frac_str = _i64tostr(&frac_buf, frac, NULL);
+    size_t frac_len = _strlen(frac_str);
+
+    /* Remove trailing zeros from the fractional part */
+    for (char* p = (char*)frac_str + frac_len; p != frac_str; p--)
+    {
+        if (p[-1] == '0')
+            p[-1] = '\0';
+    }
+
+    _strlcpy(buf->data, whole_str, sizeof(buf->data));
+    _strlcat(buf->data, ".", sizeof(buf->data));
+
+    if (*frac_str == '\0')
+        _strlcat(buf->data, "0", sizeof(buf->data));
+    else
+        _strlcat(buf->data, frac_str, sizeof(buf->data));
+
+    *size = _strlen(buf->data);
+
+    return buf->data;
+}
+
+static void _PrintString(json_write_t write, void* stream, const char* str)
+{
+    (*write)(stream, STRLIT("\""));
+
+    while (*str)
+    {
+        char c = *str++;
+
+        switch (c)
+        {
+            case '"':
+                (*write)(stream, STRLIT("\\\""));
+                break;
+            case '\\':
+                (*write)(stream, STRLIT("\\\\"));
+                break;
+            case '/':
+                (*write)(stream, STRLIT("\\/"));
+                break;
+            case '\b':
+                (*write)(stream, STRLIT("\\b"));
+                break;
+            case '\f':
+                (*write)(stream, STRLIT("\\f"));
+                break;
+            case '\n':
+                (*write)(stream, STRLIT("\\n"));
+                break;
+            case '\r':
+                (*write)(stream, STRLIT("\\r"));
+                break;
+            case '\t':
+                (*write)(stream, STRLIT("\\t"));
+                break;
+            default:
+            {
+                if (_isprint(c))
+                    (*write)(stream, &c, 1);
+                else
+                {
+                    char hex[3];
+                    _byte_to_hex_string(c, hex);
+                    (*write)(stream, STRLIT("\\u00"));
+                    (*write)(stream, hex, 2);
+                }
+            }
+        }
+    }
+
+    (*write)(stream, STRLIT("\""));
+}
+
+void json_print_value(
+    json_write_t write,
+    void* stream,
+    json_type_t type,
+    const json_union_t* un)
+{
+    switch (type)
+    {
+        case JSON_TYPE_NULL:
+        {
+            (*write)(stream, STRLIT("null"));
+            break;
+        }
+        case JSON_TYPE_BOOLEAN:
+        {
+            if (un->boolean)
+                (*write)(stream, STRLIT("true"));
+            else
+                (*write)(stream, STRLIT("false"));
+            break;
+        }
+        case JSON_TYPE_INTEGER:
+        {
+            strbuf_t buf;
+            size_t size;
+            const char* str = _i64tostr(&buf, un->integer, &size);
+            (*write)(stream, str, size);
+            break;
+        }
+        case JSON_TYPE_REAL:
+        {
+            strbuf_t buf;
+            size_t size;
+            const char* str = _dtostr(&buf, un->real, &size);
+            (*write)(stream, str, size);
+            break;
+        }
+        case JSON_TYPE_STRING:
+            _PrintString(write, stream, un->string);
+            break;
+        default:
+            break;
+    }
+}
+
+typedef struct callback_data
+{
+    int depth;
+    int newline;
+    int comma;
+    json_write_t write;
+    void* stream;
+}
+callback_data_t;
+
+json_result_t _json_print_callback(
+    json_parser_t* parser,
+    json_reason_t reason,
+    json_type_t type,
+    const json_union_t* un,
+    void* callback_data)
+{
+    callback_data_t* data = callback_data;
+    json_write_t write = data->write;
+    void* stream = data->stream;
+
+    (void)parser;
+
+    /* Print commas */
+    if (reason != JSON_REASON_END_ARRAY &&
+        reason != JSON_REASON_END_OBJECT &&
+        data->comma)
+    {
+        data->comma = 0;
+        (*write)(stream, STRLIT(","));
+    }
+
+    /* Decrease depth */
+    if (reason == JSON_REASON_END_OBJECT ||
+        reason == JSON_REASON_END_ARRAY)
+    {
+        data->depth--;
+    }
+
+    /* Print newline */
+    if (data->newline)
+    {
+        data->newline = 0;
+        (*write)(stream, STRLIT("\n"));
+        _Indent(write, stream, data->depth);
+    }
+
+    switch (reason)
+    {
+        case JSON_REASON_NONE:
+        {
+            /* Unreachable */
+            break;
+        }
+        case JSON_REASON_NAME:
+        {
+            _PrintString(write, stream, un->string);
+            (*write)(stream, STRLIT(": "));
+            data->comma = 0;
+            break;
+        }
+        case JSON_REASON_BEGIN_OBJECT:
+        {
+            data->depth++;
+            data->newline = 1;
+            data->comma = 0;
+            (*write)(stream, STRLIT("{"));
+            break;
+        }
+        case JSON_REASON_END_OBJECT:
+        {
+            data->newline = 1;
+            data->comma = 1;
+            (*write)(stream, STRLIT("}"));
+            break;
+        }
+        case JSON_REASON_BEGIN_ARRAY:
+        {
+            data->depth++;
+            data->newline = 1;
+            data->comma = 0;
+            (*write)(stream, STRLIT("["));
+            break;
+        }
+        case JSON_REASON_END_ARRAY:
+        {
+            data->newline = 1;
+            data->comma = 1;
+            (*write)(stream, STRLIT("]"));
+            break;
+        }
+        case JSON_REASON_VALUE:
+        {
+            data->newline = 1;
+            data->comma = 1;
+            json_print_value(write, stream, type, un);
+            break;
+        }
+    }
+
+    /* Final newline */
+    if (reason == JSON_REASON_END_OBJECT ||
+        reason == JSON_REASON_END_ARRAY)
+    {
+        if (data->depth == 0)
+            (*write)(stream, STRLIT("\n"));
+    }
+
+    return JSON_OK;
+}
+
+json_result_t json_print(
+    json_write_t write,
+    void* stream,
+    const char* json_data,
+    size_t json_size,
+    json_allocator_t* allocator)
+{
+    json_result_t result = JSON_UNEXPECTED;
+    char* data = NULL;
+    json_parser_t parser;
+    callback_data_t callback_data = { 0, 0, 0, write, stream };
+
+    if (!write || !json_data || !json_size)
+        RAISE(JSON_BAD_PARAMETER);
+
+    if (!allocator || !allocator->ja_malloc || !allocator->ja_free)
+        return JSON_BAD_PARAMETER;
+
+    if (!(data = allocator->ja_malloc(json_size)))
+        RAISE(JSON_OUT_OF_MEMORY);
+
+    _memcpy(data, json_data, json_size);
+
+    if (json_parser_init(
+        &parser,
+        data,
+        json_size,
+        _json_print_callback,
+        &callback_data,
+        allocator) != JSON_OK)
+    {
+        RAISE(JSON_FAILED);
+    }
+
+    if (json_parser_parse(&parser) != JSON_OK)
+    {
+        RAISE(JSON_BAD_SYNTAX);
+    }
+
+    if (callback_data.depth != 0)
+    {
+        RAISE(JSON_BAD_SYNTAX);
+    }
+
+    result = JSON_OK;
+
+done:
+
+    if (data)
+        allocator->ja_free(data);
+
+    return result;
+}
+
+void json_dump_path(
+    json_write_t write,
+    void* stream,
+    json_parser_t* parser)
+{
+    if (write && parser)
+    {
+        size_t depth = parser->depth;
+
+        for (size_t i = 0; i < depth; i++)
+        {
+            (*write)(stream, parser->nodes[i].name,
+                _strlen(parser->nodes[i].name));
+
+            if (parser->nodes[i].size)
+            {
+                strbuf_t buf;
+                size_t size;
+                const char* str = _i64tostr(&buf, parser->nodes[i].size, &size);
+
+                (*write)(stream, STRLIT("["));
+                (*write)(stream, str, size);
+                (*write)(stream, STRLIT("]"));
+            }
+
+            if (i + 1 != depth)
+                (*write)(stream, STRLIT("."));
+        }
+
+        (*write)(stream, STRLIT("\n"));
+    }
 }

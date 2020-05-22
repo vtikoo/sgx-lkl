@@ -146,4 +146,27 @@ json_result_t json_match(
     const char* pattern,
     unsigned long* index);
 
+typedef void (*json_write_t)(
+    void* stream,
+    const void* buf,
+    size_t count);
+
+void json_print_value(
+    json_write_t write,
+    void* stream,
+    json_type_t type,
+    const json_union_t* un);
+
+json_result_t json_print(
+    json_write_t write,
+    void* write_data,
+    const char* json_data,
+    size_t json_size,
+    json_allocator_t* allocator);
+
+void json_dump_path(
+    json_write_t write,
+    void* stream,
+    json_parser_t* parser);
+
 #endif /* _JSON_H */

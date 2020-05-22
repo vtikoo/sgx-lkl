@@ -1,7 +1,7 @@
-TARGET = jsonsample
+TARGET = sample1
 CFLAGS = -Wall -Werror
 INCLUDES = -I../include
-LDFLAGS = -L.. -ljsonprint -ljson
+LDFLAGS = -L.. -ljson
 
 $(TARGET): main.c ../libjson.a
 	gcc $(CFLAGS) $(INCLUDES) -c main.c
@@ -12,5 +12,5 @@ clean:
 	rm -f $(TARGET) main.o strings.o
 
 tests: $(TARGET)
-	jsonsample sample.json
-	@ echo "=== passed jsonsample test"
+	sample1 sample.json
+	@ echo "=== passed sample1 test"

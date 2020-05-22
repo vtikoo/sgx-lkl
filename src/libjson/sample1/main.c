@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <json.h>
-#include <jsonprint.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <stdint.h>
@@ -62,6 +61,11 @@ static int _strtou64(uint64_t* x, const char* str)
         return -1;
 
     return 0;
+}
+
+static void _write(void* stream, const void* buf, size_t count)
+{
+    fwrite(buf, 1, count, (FILE*)stream);
 }
 
 static json_result_t _json_read_callback(
@@ -690,7 +694,7 @@ static json_result_t _json_read_callback(
             }
             else
             {
-                json_dump_path(parser);
+                json_dump_path(_write, stdout, parser);
                 result = JSON_UNKNOWN_VALUE;
                 goto done;
             }
