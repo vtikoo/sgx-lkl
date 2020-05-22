@@ -21,7 +21,6 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 #include <json.h>
-#include <jsonprint.h>
 
 #include "luks2.h"
 #include "vic.h"
@@ -209,6 +208,11 @@ static bool _valid_pbkdf_type(const char* type)
     }
 
     return false;
+}
+
+static void _write(void* stream, const void* buf, size_t count)
+{
+    fwrite(buf, 1, count, (FILE*)stream);
 }
 
 static json_result_t _json_read_callback(
@@ -900,7 +904,7 @@ static json_result_t _json_read_callback(
             }
             else
             {
-                json_dump_path(parser);
+                json_dump_path(_write, stdout, parser);
                 result = JSON_UNKNOWN_VALUE;
                 GOTO(done);
             }
@@ -940,7 +944,7 @@ static void _put_str_field(
     fprintf(os, "\"%s\":%s", name, t.sp);
 
     un.string = (char*)value;
-    json_print_value(os, JSON_TYPE_STRING, &un);
+    json_print_value(_write, os, JSON_TYPE_STRING, &un);
 
     fprintf(os, "%s%s", comma, t.nl);
 }
@@ -972,7 +976,7 @@ static void _put_base64_field(
     }
 
     un.string = (char*)buf;
-    json_print_value(os, JSON_TYPE_STRING, &un);
+    json_print_value(_write, os, JSON_TYPE_STRING, &un);
 
     fprintf(os, "%s%s", comma, t.nl);
 }
