@@ -18,15 +18,15 @@ all: $(TARGET) dirs
 $(TARGET): $(OBJECTS)
 	ar rv $(TARGET) json.o
 
-dirs:
-	$(MAKE) -C sample1
-	$(MAKE) -C sample2
-	$(MAKE) -C jsonprint
-
 %.o: %.c
 	gcc -c $(CFLAGS) $(DEFINES) $(INCLUDES) -o $@ $<
 
 json.o: include/json.h
+
+dirs:
+	$(MAKE) -C sample1
+	$(MAKE) -C sample2
+	$(MAKE) -C jsonprint
 
 clean:
 	rm -rf $(OBJECTS) libjson.a
