@@ -1448,7 +1448,9 @@ static void _PrintString(json_write_t write, void* stream, const char* str)
             default:
             {
                 if (_isprint(c))
+                {
                     (*write)(stream, &c, 1);
+                }
                 else
                 {
                     char hex[3];
