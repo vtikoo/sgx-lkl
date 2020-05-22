@@ -278,18 +278,23 @@ done:
     return result;
 }
 
-void json_dump_path(const char* path[], size_t depth)
+void json_dump_path(json_parser_t* parser)
 {
-    if (path)
+    if (parser)
     {
+        size_t depth = parser->depth;
+
         for (size_t i = 0; i < depth; i++)
         {
-            printf("%s", path[i]);
+            fprintf(stderr, "%s", parser->nodes[i].name);
+
+            if (parser->nodes[i].size)
+                fprintf(stderr, "[%lu]", parser->nodes[i].index);
 
             if (i + 1 != depth)
-                printf(".");
+                fprintf(stderr, ".");
         }
 
-        printf("\n");
+        fprintf(stderr, "\n");
     }
 }

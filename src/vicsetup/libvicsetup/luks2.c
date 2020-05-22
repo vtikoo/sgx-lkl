@@ -271,8 +271,6 @@ static json_result_t _json_read_callback(
         }
         case JSON_REASON_VALUE:
         {
-            const char** path = data->path;
-            size_t depth = data->depth;
             unsigned long i;
 
             if (json_match(parser, "keyslots.#.type", &i) == JSON_OK)
@@ -902,7 +900,7 @@ static json_result_t _json_read_callback(
             }
             else
             {
-                json_dump_path(path, depth);
+                json_dump_path(parser);
                 result = JSON_UNKNOWN_VALUE;
                 GOTO(done);
             }

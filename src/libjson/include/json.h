@@ -103,6 +103,14 @@ typedef struct _json_allocator
 }
 json_allocator_t;
 
+typedef struct _json_node
+{
+    const char* name;
+    size_t size;
+    size_t index;
+}
+json_node_t;
+
 struct _json_parser
 {
     unsigned int magic;
@@ -112,7 +120,7 @@ struct _json_parser
     int scan;
     json_parser_callback_t callback;
     void* callback_data;
-    const char* path[JSON_MAX_NESTING];
+    json_node_t nodes[JSON_MAX_NESTING];
     size_t depth;
     json_allocator_t* allocator;
     void (*trace)(

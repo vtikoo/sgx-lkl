@@ -59,7 +59,7 @@ __test3:
 	vicsetup verityClose $(NAME)
 	rm -rf $(TEMPFILE)
 
-CLEAN += hashtree verity verity.hash file
+CLEAN += hashtree verity verity.hash file tmpfile
 
 DIRS += $(TOP)/vicsetup
 

@@ -775,6 +775,7 @@ static json_result_t _get_array(json_parser_t* parser, size_t* array_size)
 {
     json_result_t result = JSON_OK;
     char c;
+    size_t index = 0;
 
     /* array = begin-array [ value *( value-separator value ) ] end-array */
     for (;;)
@@ -800,6 +801,8 @@ static json_result_t _get_array(json_parser_t* parser, size_t* array_size)
         }
         else
         {
+            parser->nodes[parser->depth - 1].index = index++;
+
             parser->ptr--;
             CHECK(_get_value(parser));
 
@@ -844,7 +847,11 @@ static json_result_t _get_object(json_parser_t* parser)
             /* Get name */
             CHECK(_get_string(parser, (char**)&un.string));
 
-            parser->path[parser->depth - 1] = un.string;
+            /* Insert node */
+            {
+                json_node_t node = { un.string, 0, 0 };
+                parser->nodes[parser->depth - 1] = node;
+            }
 
             CHECK(_invoke_callback(parser, JSON_REASON_NAME, JSON_TYPE_STRING,
                 &un));
@@ -1012,6 +1019,8 @@ static json_result_t _get_value(json_parser_t* parser)
                     RAISE(JSON_BAD_SYNTAX);
 
                 un.integer = (signed long long)array_size;
+
+                parser->nodes[parser->depth - 1].size = array_size;
             }
 
             CHECK(_invoke_callback(
@@ -1146,7 +1155,7 @@ json_result_t json_match(
     unsigned long n = 0;
     size_t pattern_len;
 
-    if (!parser || !parser->path || !pattern)
+    if (!parser || !pattern)
         RAISE(JSON_BAD_PARAMETER);
 
     /* Make a copy of the pattern that can be modified */
@@ -1180,10 +1189,10 @@ json_result_t json_match(
     {
         if (_strcmp(pattern_path[i], "#") == 0)
         {
-            if (_strtou64(&n, parser->path[i]) != 0)
+            if (_strtou64(&n, parser->nodes[i].name) != 0)
                 RAISE(JSON_TYPE_MISMATCH);
         }
-        else if (_strcmp(pattern_path[i], parser->path[i]) != 0)
+        else if (_strcmp(pattern_path[i], parser->nodes[i].name) != 0)
         {
             result = JSON_NO_MATCH;
             goto done;

@@ -31,6 +31,7 @@
 #define _JSONPRINT_H
 
 #include <stdio.h>
+#include <json.h>
 
 void json_print_value(
     FILE* os,
@@ -42,6 +43,6 @@ json_result_t json_print(
     const char* json_data,
     size_t json_size);
 
-void json_dump_path(const char* path[], size_t depth);
+void json_dump_path(json_parser_t* parser);
 
 #endif /* _JSONPRINT_H */

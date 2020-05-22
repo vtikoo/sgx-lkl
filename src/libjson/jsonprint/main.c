@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <json.h>
+#include <jsonprint.h>
 #include <sys/stat.h>
 #include <string.h>
 
@@ -205,6 +206,9 @@ static json_result_t _callback(
         }
         case JSON_REASON_VALUE:
         {
+#if 0
+            json_dump_path(parser);
+#endif
             cd->newline = 1;
             cd->comma = 1;
             _print_value(type, un, cd);
