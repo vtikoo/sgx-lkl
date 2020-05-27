@@ -2,6 +2,7 @@ TARGET = libjson.a
 
 CFLAGS += -g
 CFLAGS += -O3
+CFLAGS += -fPIE
 CFLAGS += -Wall
 CFLAGS += -Werror
 CFLAGS += -Wextra
