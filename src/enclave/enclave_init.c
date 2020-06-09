@@ -15,6 +15,7 @@
 #include "enclave/enclave_mem.h"
 #include "enclave/enclave_util.h"
 #include "enclave/lthread.h"
+#include "enclave/lthread_int.h"
 #include "enclave/sgxlkl_app_config.h"
 #include "enclave/sgxlkl_config.h"
 #include "enclave/wireguard.h"
@@ -240,9 +241,10 @@ int __libc_init_enclave(int argc, char** argv)
     max_lthreads = next_pow2(max_lthreads);
 
     newmpmcq(&__scheduler_queue, max_lthreads, 0);
-
+    
+    init_ethread_tls();
     __init_libc(envp, argv[0]);
-    __init_tls();
+    
 
     size_t futex_wake_spins = sgxlkl_enclave->shared_memory.vvar ? 1 : 500;
     size_t espins = sgxlkl_enclave->espins;
