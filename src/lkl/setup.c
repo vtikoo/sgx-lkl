@@ -38,6 +38,7 @@
 #include "libdevmapper.h"
 
 #include "enclave/enclave_util.h"
+#include "enclave/lthread.h"
 #include "enclave/sgxlkl_config.h"
 #include "enclave/sgxlkl_t.h"
 #include "enclave/wireguard.h"
