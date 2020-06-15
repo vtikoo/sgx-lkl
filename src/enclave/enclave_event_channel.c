@@ -1,8 +1,6 @@
 #include <atomic.h>
 #include <string.h>
 
-// #include "pthread_impl.h"
-
 #include <lkl/virtio.h>
 
 #include "enclave/enclave_util.h"
