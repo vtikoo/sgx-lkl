@@ -242,7 +242,7 @@ int __libc_init_enclave(int argc, char** argv)
 
     newmpmcq(&__scheduler_queue, max_lthreads, 0);
     
-    init_ethread_tls();
+    init_ethread_tp();
     __init_libc(envp, argv[0]);
     
 

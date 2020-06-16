@@ -68,7 +68,7 @@ void sgxlkl_ethread_init(void)
     }
 
     /* Initialization completed, now run the scheduler */
-    init_ethread_tls();
+    init_ethread_tp();
     _lthread_sched_init(sgxlkl_enclave->stacksize);
     lthread_run();
 
