@@ -404,7 +404,7 @@ int __init_utp(void *p, int set_tp)
 	struct lthread_tcb_base *tcb = (struct lthread_tcb_base *)p;
 	tcb->self = p;
 	tcb->schedctx = __scheduler_self();
-	if (libc.user_tls_enabled && set_tp)
+	if (set_tp)
 	{
 		if (sgxlkl_enclave->mode == SW_DEBUG_MODE)
 		{
@@ -424,22 +424,8 @@ int __init_utp(void *p, int set_tp)
 
 void *__copy_utls(struct lthread *lt, unsigned char *mem, size_t sz)
 {
-	struct tls_module *p;
-	size_t i;
-	uintptr_t *dtv;
-
-	dtv = (uintptr_t *)mem;
-
 	mem += sz - sizeof(struct lthread_tcb_base);
 	mem -= (uintptr_t)mem & (libc.tls_align - 1);
-
-	for (i = 1, p = libc.tls_head; p; i++, p = p->next)
-	{
-		dtv[i] = (uintptr_t)(mem - p->offset) + DTP_OFFSET;
-		memcpy(mem - p->offset, p->image, p->len);
-	}
-	dtv[0] = libc.tls_cnt;
-	lt->dtv = lt->dtv_copy = dtv;
 	return (void *)mem;
 }
 
