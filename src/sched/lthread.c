@@ -47,6 +47,7 @@
 #include "enclave/ticketlock.h"
 #include "shared/tree.h"
 #include "openenclave/corelibc/oemalloc.h"
+#include "openenclave/corelibc/oestring.h"
 
 #include "openenclave/corelibc/oemalloc.h"
 #include "openenclave/corelibc/oestring.h"
