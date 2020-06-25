@@ -348,7 +348,7 @@ void _lthread_free(struct lthread* lt)
     // lthread only manages tls region for lkl kernel threads
     if (lt->attr.thread_type == LKL_KERNEL_THREAD && lt->itls != 0)
     {
-        oe_free(lt->itls);
+        enclave_munmap(lt->itls, lt->itlssz);
     }
 
     if (lt->attr.stack)
@@ -392,6 +392,15 @@ void _lthread_free(struct lthread* lt)
 
     oe_free(lt);
     lt = 0;
+}
+
+void __init_tp(struct lthread *lt, unsigned char *mem, size_t sz)
+{
+	mem += sz - sizeof(struct lthread_tcb_base);
+	mem -= (uintptr_t)mem & (TLS_ALIGN - 1);
+    lt->tp = mem;
+	struct lthread_tcb_base *tcb = (struct lthread_tcb_base *)mem;
+	tcb->self = mem;
 }
 
 void set_tls_tp(struct lthread* lt)
@@ -556,14 +565,16 @@ int lthread_create_primitive(
     }
 
     lt->itls = tls;
-    lt->tp = tls; // for cloned threads, the tls argument is a ptr to the TCB
+    // for cloned threads, tls argument is a ptr to the Thread Control Block
+    lt->tp = tls;
     LIST_INIT(&lt->tls);
     lt->attr.state = BIT(LT_ST_READY);
     lt->attr.thread_type = USERSPACE_THREAD;
     lt->tid = a_fetch_add(&spawned_lthreads, 1);
 
     static unsigned long long n = 0;
-    snprintf(lt->funcname, 64, "cloned host task %llu", __atomic_fetch_add(&n, 1, __ATOMIC_SEQ_CST));
+    snprintf(lt->funcname, 64, "cloned host task %llu",
+                 __atomic_fetch_add(&n, 1, __ATOMIC_SEQ_CST));
 
     if (new_lt)
     {
@@ -631,16 +642,17 @@ int lthread_create(
 
     /* mmap tls image */
     lt->itlssz = (sizeof(struct lthread_tcb_base) + TLS_ALIGN - 1) & -TLS_ALIGN;
-    if ((lt->itls = (uint8_t*)oe_calloc(1, lt->itlssz)) == NULL)
+    if ((lt->itls = (uint8_t*)enclave_mmap(
+                 0,
+                 lt->itlssz,
+                 0, /* map_fixed */
+                 PROT_READ | PROT_WRITE,
+                 1 /* zero_pages */)) == MAP_FAILED)
     {
         oe_free(lt);
         return -1;
     }
-    uintptr_t tp_unaligned =
-        (uintptr_t)(lt->itls + lt->itlssz - sizeof(struct lthread_tcb_base));
-    lt->tp =
-            (struct
-            lthread_tcb_base*)(tp_unaligned - (tp_unaligned & (TLS_ALIGN - 1)));
+    __init_tp(lt, lt->itls, lt->itlssz);
 
     lt->attr.state = BIT(LT_ST_NEW) | (attrp ? attrp->state : 0);
     lt->attr.thread_type = LKL_KERNEL_THREAD;
