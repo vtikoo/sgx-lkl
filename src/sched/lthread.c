@@ -342,7 +342,6 @@ void _lthread_yield(struct lthread* lt)
 
 void _lthread_free(struct lthread* lt)
 {
-    volatile void* volatile* rp;
     if (lthread_self() != NULL)
         lthread_rundestructors(lt);
     
