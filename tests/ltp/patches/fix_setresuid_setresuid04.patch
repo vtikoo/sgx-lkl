@@ -1,10 +1,14 @@
-    This patch is necessary to fix test failure in sgxlkl
-    environment and to test the syscall "setresuid"
-    behaves correctly with file permissions in
-    Multi-threaded environment.
+From 4310b8ffe365bd4684a99e9a22b9ac21212ec2ec Mon Sep 17 00:00:00 2001
+From: Vikas Tikoo <vtikoo@users.noreply.github.com>
+Date: Tue, 14 Jul 2020 14:40:52 +0000
+Subject: [PATCH] Add errno check to do_sub_thread.
+
+---
+ .../kernel/syscalls/setresuid/setresuid04.c   | 118 ++++++++----------
+ 1 file changed, 53 insertions(+), 65 deletions(-)
 
 diff --git a/testcases/kernel/syscalls/setresuid/setresuid04.c b/testcases/kernel/syscalls/setresuid/setresuid04.c
-index e197476ff..78af5adca 100644
+index e197476ff..947bfabe8 100644
 --- a/testcases/kernel/syscalls/setresuid/setresuid04.c
 +++ b/testcases/kernel/syscalls/setresuid/setresuid04.c
 @@ -25,8 +25,8 @@
@@ -26,7 +30,7 @@ index e197476ff..78af5adca 100644
  
  TCID_DEFINE(setresuid04);
  int TST_TOTAL = 1;
-@@ -65,46 +66,66 @@ int fd = -1;
+@@ -65,46 +66,67 @@ int fd = -1;
  
  void setup(void);
  void cleanup(void);
@@ -71,12 +75,13 @@ index e197476ff..78af5adca 100644
 +	TEST(tst_fd2 = open(testfile, O_RDWR));
 +
 +	if (TEST_RETURN != -1) {
-+		tst_resm(TPASS,
-+			"open call succeeded as expected in thread2");
-+		close(tst_fd2);
++	        close(tst_fd2);
++                tst_brkm(TBROK, cleanup, "open succeeded unexpectedly\n");
++        }
++	if (TEST_ERRNO == EACCES) {
++                tst_resm(TPASS, "open failed with EACCES as expected\n");
 +	} else {
-+		tst_brkm(TBROK, cleanup,
-+			"open failed unexpectedly in thread2\n");
++		tst_brkm(TBROK, cleanup, "open failed unexpectedly in thread2\n");
 +	}
 +	pthread_exit(NULL);
 +}
@@ -109,7 +114,7 @@ index e197476ff..78af5adca 100644
  		}
  
  		/* Test 1: Check the process with new uid cannot open the file
-@@ -113,78 +134,44 @@ void do_master_child(void)
+@@ -113,78 +135,44 @@ void do_master_child(void)
  		TEST(tst_fd = open(testfile, O_RDWR));
  
  		if (TEST_RETURN != -1) {
@@ -201,3 +206,6 @@ index e197476ff..78af5adca 100644
  }
  
  /*
+-- 
+2.17.1
+
