@@ -152,6 +152,7 @@ static void _free_elf_stack()
 }
 
 // We need to have a separate function here
+/* MEB#2: enclave entry point (ecall) */
 int __sgx_init_enclave()
 {
     const sgxlkl_enclave_config_t* config = sgxlkl_enclave_state.config;
@@ -337,6 +338,7 @@ static void _free_shared_memory()
     oe_free((char**)shm->env);
 }
 
+/* MEB#1: enclave entry point (ecall) */
 int sgxlkl_enclave_init(const sgxlkl_shared_memory_t* shared_memory)
 {
     SGXLKL_ASSERT(shared_memory);
