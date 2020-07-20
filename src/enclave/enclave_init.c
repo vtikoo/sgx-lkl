@@ -128,7 +128,6 @@ static void _enter_user_space(
         sgxlkl_warn,
         sgxlkl_error,
         sgxlkl_fail,
-        sgxlkl_in_sw_debug_mode,
         lthread_current,
         enclave_mmap_flags_supported,
         syscall_SYS_mmap,
@@ -147,6 +146,7 @@ static void _enter_user_space(
     _userargs.stack = stack;
     _userargs.elf64_hdr = (const void*)__oe_get_isolated_image_base();
     _userargs.num_ethreads = num_ethreads;
+    _userargs.sw_debug_mode = sgxlkl_in_sw_debug_mode();
     memcpy(_userargs.clock_res, clock_res, sizeof(_userargs.clock_res));
 
     (*proc)(&_userargs);

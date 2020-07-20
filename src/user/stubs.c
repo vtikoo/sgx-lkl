@@ -50,7 +50,7 @@ void sgxlkl_fail(const char* msg, ...)
 
 bool sgxlkl_in_sw_debug_mode()
 {
-    return __sgxlkl_userargs->ua_sgxlkl_in_sw_debug_mode();
+    return __sgxlkl_userargs->sw_debug_mode;
 }
 
 struct lthread* lthread_current()

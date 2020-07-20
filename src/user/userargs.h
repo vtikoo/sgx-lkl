@@ -22,7 +22,6 @@ typedef struct sgxlkl_userargs
     void (*ua_sgxlkl_warn)(const char* msg, ...);
     void (*ua_sgxlkl_error)(const char* msg, ...);
     void (*ua_sgxlkl_fail)(const char* msg, ...);
-    bool (*ua_sgxlkl_in_sw_debug_mode)(void);
     struct lthread* (*ua_lthread_current)(void);
     int (*ua_enclave_mmap_flags_supported)(int flags, int fd);
     void* (*ua_syscall_SYS_mmap)(
@@ -58,6 +57,9 @@ typedef struct sgxlkl_userargs
 
     /* to be passed to init_clock_res() */
     struct sgxlkl_user_timespec clock_res[8];
+
+    /* where in debug mode or not */
+    bool sw_debug_mode;
 }
 sgxlkl_userargs_t;
 
