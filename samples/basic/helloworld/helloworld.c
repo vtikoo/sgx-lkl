@@ -5,8 +5,15 @@
 
 #define HW_FILE "/app/helloworld.txt"
 
+__attribute__((noinline))
+void mikbras()
+{
+}
+
 int main(int argc, char** argv)
 {
+    mikbras();
+
     char buf[100];
     FILE* f = fopen(HW_FILE, "r");
     if (!f)

@@ -19,6 +19,37 @@ static inline void _barrier()
     __asm__ __volatile__( "" : : : "memory" );
 }
 
+/* forward declaration */
+struct dso;
+
+void __attribute__ ((noinline))
+__gdb_hook_load_debug_symbols(struct dso *dso, void *symmem, ssize_t symsz)
+{
+    sgxlkl_warn("********** __gdb_hook_load_debug_symbols(): "
+        "dso=%p symmem=%p symsz=%zd\n",
+        dso, symmem, symsz);
+    __asm__ volatile ("" : : "m" (dso), "m" (symmem), "m" (symsz));
+}
+
+void __attribute__ ((noinline))
+__gdb_hook_load_debug_symbols_from_file(struct dso *dso, char *libpath)
+{
+    sgxlkl_warn("********** __gdb_hook_load_debug_symbols_from_file()\n");
+    __asm__ volatile ("" : : "m" (dso), "m" (libpath));
+}
+
+void __attribute__ ((noinline))
+__gdb_hook_load_debug_symbols_wrap(struct dso *dso, void *symmem, ssize_t symsz)
+{
+    return __gdb_hook_load_debug_symbols(dso, symmem, symsz);
+}
+
+void __attribute__ ((noinline))
+__gdb_hook_load_debug_symbols_from_file_wrap(struct dso *dso, char *libpath)
+{
+    return __gdb_hook_load_debug_symbols_from_file(dso, libpath);
+}
+
 void sgxlkl_user_enter(sgxlkl_userargs_t* args)
 {
     __sgxlkl_userargs = args;

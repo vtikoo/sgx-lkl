@@ -33,7 +33,7 @@ clean:
 	rm -f $(DISK_IMAGE) $(PROG) $(PROG_NONPIE)
 
 $(PROG): $(PROG_C)
-	${MUSL_CC} -fPIE -pie -o $@ $(PROG_C)
+	${MUSL_CC} -fPIE -pie -O0 -g -o $@ $(PROG_C)
 
 # non-PIE executable are currently unsupported by SGX-LKL-OE
 $(PROG_NONPIE): $(PROG_C)
@@ -55,3 +55,6 @@ run-sw: $(DISK_IMAGE)
 
 run-sw-gdb: $(DISK_IMAGE)
 	${SGXLKL_ENV} ${SGXLKL_GDB} --args ${SGXLKL_STARTER} --sw-debug --enclave-config enclave_config.json $(DISK_IMAGE)
+
+xxx:
+	echo ${SGXLKL_GDB}
