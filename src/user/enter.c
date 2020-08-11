@@ -41,12 +41,14 @@ __gdb_hook_load_debug_symbols_from_file(struct dso *dso, char *libpath)
 void __attribute__ ((noinline))
 __gdb_hook_load_debug_symbols_wrap(struct dso *dso, void *symmem, ssize_t symsz)
 {
+    sgxlkl_warn("********** user __gdb_hook_load_debug_symbols_wrap()");
     return __gdb_hook_load_debug_symbols(dso, symmem, symsz);
 }
 
 void __attribute__ ((noinline))
 __gdb_hook_load_debug_symbols_from_file_wrap(struct dso *dso, char *libpath)
 {
+    sgxlkl_warn("********** user __gdb_hook_load_debug_symbols_from_file_wrap()");
     return __gdb_hook_load_debug_symbols_from_file(dso, libpath);
 }
 
